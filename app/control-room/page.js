@@ -24,6 +24,8 @@ export default function ControlRoomPage() {
 
   async function refresh() {
     setError("");
+    const supabase = getSupabase();
+    if (!supabase) return;
     const [a, b, c, d] = await Promise.all([
       supabase.from("competitions").select("*").order("name"),
       supabase.from("seasons").select("*, competitions(name)").order("created_at", { ascending: false }),
@@ -41,11 +43,16 @@ export default function ControlRoomPage() {
     setPlayers(d.data || []);
   }
 
-  function getSupabase() {\n    if (typeof window === "undefined") return null;\n    return createSupabaseBrowserClient();\n  }
+  function getSupabase() {
+    if (typeof window === "undefined") return null;
+    return createSupabaseBrowserClient();
+  }
 
   useEffect(() => {
     let mounted = true;
     async function boot() {
+      const supabase = getSupabase();
+      if (!supabase) return;
       const session = await supabase.auth.getSession();
       if (!mounted) return;
       if (session.error || !session.data.session) {
@@ -68,7 +75,12 @@ export default function ControlRoomPage() {
     setSaving(true);
     setError("");
     setNotice("");
-    const supabase = getSupabase();\n    if (!supabase) return;\n    const result = await supabase.from(table).insert(values);
+    const supabase = getSupabase();
+    if (!supabase) {
+      setSaving(false);
+      return;
+    }
+    const result = await supabase.from(table).insert(values);
     setSaving(false);
     if (result.error) {
       setError(result.error.message);
@@ -80,7 +92,8 @@ export default function ControlRoomPage() {
   }
 
   async function signOut() {
-    const supabase = getSupabase();\n    if (supabase) await supabase.auth.signOut();
+    const supabase = getSupabase();
+    if (supabase) await supabase.auth.signOut();
     window.location.href = "/login";
   }
 
