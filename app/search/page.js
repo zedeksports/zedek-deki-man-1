@@ -28,7 +28,7 @@ export default function SearchPage() {
         s.from("teams").select("id,name,short_name,area,logo_url").eq("is_active",true).or("name.ilike.%"+term+"%,short_name.ilike.%"+term+"%,area.ilike.%"+term+"%").limit(8),
         s.from("players").select("id,full_name,position,shirt_number,photo_url,team:teams!players_team_id_fkey(id,name,short_name,logo_url)").eq("is_active",true).or("full_name.ilike.%"+term+"%,position.ilike.%"+term+"%").limit(8),
         s.from("competitions").select("id,name,location,description").eq("is_active",true).or("name.ilike.%"+term+"%,location.ilike.%"+term+"%,description.ilike.%"+term+"%").limit(8),
-        s.from("matches").select("id,scheduled_at,status,home_score,away_score,venue,home_team:teams!matches_home_team_id_fkey(id,name,short_name,logo_url),away_team:teams!matches_away_team_id_fkey(id,name,short_name,logo_url),season:seasons(id,name,competition:competitions(id,name))").or("venue.ilike.%"+term+"%").order("scheduled_at",{ascending:false}).limit(8)
+        s.from("matches").select("id,scheduled_at,status,home_score,away_score,venue,home_team:teams!matches_home_team_id_fkey(id,name,short_name,logo_url),away_team:teams!matches_away_team_id_fkey(id,name,short_name,logo_url),season:seasons(id,name,competition:competitions(id,name))").order("scheduled_at",{ascending:false}).limit(100)
       ]);
       const firstError=[teams,players,competitions,matches].find(x=>x.error);
       if(firstError) throw firstError.error;
@@ -39,7 +39,7 @@ export default function SearchPage() {
         const text=[m.home_team?.name,m.home_team?.short_name,m.away_team?.name,m.away_team?.short_name,m.season?.competition?.name,m.venue].filter(Boolean).join(" ").toLowerCase();
         return text.includes(term.toLowerCase()) || officialIds.has(m.id) && [m.home_score,m.away_score].join(" ").includes(term);
       });
-      setResults({teams:teams.data||[],players:players.data||[],competitions:competitions.data||[],matches:matchData});
+      setResults({teams:(teams.data||[]).slice(0,8),players:(players.data||[]).slice(0,8),competitions:(competitions.data||[]).slice(0,8),matches:matchData.slice(0,8)});
     } catch(e) {
       setError(e.message||"Search could not be completed.");
     } finally { setLoading(false); }
