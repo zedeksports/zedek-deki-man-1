@@ -117,3 +117,5 @@ a{color:inherit;text-decoration:none}button,input,select,textarea{font:inherit}
   .auth-card{padding:26px 20px;border-radius:20px}
   .auth-card h1{font-size:28px}
 }
+
+.button.danger{border-color:#b42318;color:#b42318}.button.danger:hover{background:#fff1f0}
