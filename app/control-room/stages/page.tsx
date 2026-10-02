@@ -114,7 +114,7 @@ export default function StagesPage() {
         {loading ? <p>Loading stages…</p> : items.length === 0 ? <div className="panel"><p>No stages yet.</p></div> :
         <div className="module-grid">{items.map(item => <article className="module" key={item.id}>
           <strong>{item.name}</strong><small>{seasonName(item.season_id)}</small><small>{item.stage_type} · Order {item.stage_order}</small><small>{item.is_active ? "Active" : "Inactive"}</small>
-          <div className="button-row"><button className="button" onClick={() => editStage(item)}>Edit</button><button className="button" onClick={() => toggleActive(item)}>{item.is_active ? "Deactivate" : "Activate"}</button><button className="button danger" onClick={() => remove(item)}>Delete</button></div>
+          <div className="button-row"><button className="button" onClick={() => editStage(item)}>Edit</button><button className="button" onClick={() => toggleActive(item)}>{item.is_active ? "Deactivate" : "Activate"}</button><button className="button danger" onClick={() => remove(item)} disabled={!item.is_active}>{item.is_active ? "Archive" : "Archived"}</button></div>
         </article>)}</div>}
       </section>
     </main>
