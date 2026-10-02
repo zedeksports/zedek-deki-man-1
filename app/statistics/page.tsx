@@ -112,6 +112,22 @@ export default function StatisticsPage() {
     return { played: row.played, gf: row.gf, ga: row.ga, points: row.points, gd: row.gf - row.ga };
   }, [standings, teamId]);
 
+  const playerStats = useMemo(() => {
+    const stats = new Map<string, { goals: number; yellow: number; red: number }>();
+    players.filter(p => !teamId || p.team_id === teamId).forEach(p => stats.set(p.id, { goals: 0, yellow: 0, red: 0 }));
+    events.forEach(e => {
+      if (!e.player_id || !stats.has(e.player_id)) return;
+      const s = stats.get(e.player_id)!;
+      if (e.event_type === "goal") s.goals++;
+      if (e.event_type === "yellow_card") s.yellow++;
+      if (e.event_type === "red_card") s.red++;
+    });
+    return [...stats.entries()].map(([id, s]) => ({ player: playerMap.get(id)!, ...s }))
+      .filter(x => x.goals || x.yellow || x.red)
+      .sort((a,b) => b.goals-a.goals || b.yellow-a.yellow || a.player.full_name.localeCompare(b.player.full_name))
+      .slice(0, 20);
+  }, [events, players, playerMap, teamId]);
+
   const scorers = useMemo(() => {
     const counts = new Map<string, number>();
     events.forEach(e => { if (e.event_type === "goal" && e.player_id) counts.set(e.player_id, (counts.get(e.player_id) || 0) + 1); });
@@ -134,7 +150,8 @@ export default function StatisticsPage() {
         <p>Official standings and player statistics are calculated from finished and verified match records only.</p>
         <div className="stats-toolbar">
           <label>Season<select value={seasonId} onChange={e => void changeSeason(e.target.value)} disabled={!seasons.length}><option value="">Select season</option>{seasons.map(s => <option key={s.id} value={s.id}>{s.name} · {s.year} · {competitionMap.get(s.competition_id) || "Competition"}</option>)}</select></label>
-          {season && <span className="stats-source">Official data · {season.name}</span>\n          {seasonTeams.length > 0 && <label>Team<select value={teamId} onChange={e => setTeamId(e.target.value)}><option value="">Select team</option>{seasonTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>}}
+          {season && <span className="stats-source">Official data · {season.name}</span>}
+          {seasonTeams.length > 0 && <label>Team<select value={teamId} onChange={e => setTeamId(e.target.value)}><option value="">Select team</option>{seasonTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>}}
         </div>
       </section>
       <section className="container section">
@@ -148,6 +165,23 @@ export default function StatisticsPage() {
               {scorers.length ? <div className="rank-list">{scorers.map((x,i)=><div className="rank-row" key={x.player!.id}><span className="rank">{i+1}</span><div><strong>{x.player!.full_name}</strong><small>{teamMap.get(x.player!.team_id) || "Team"}</small></div><b>{x.goals}</b></div>)}</div> : <p className="muted">Goal events will appear here after official matches are recorded.</p>}
             </section>
           </div>
+
+          {teamId && <div className="stats-grid">
+            <section className="panel"><div className="section-heading"><h2>Team Statistics</h2><span>{teamMap.get(teamId)}</span></div>
+              {teamSummary && <div className="team-summary">{[
+                ["P",teamSummary.played],["W",teamSummary.wins],["D",teamSummary.draws],["L",teamSummary.losses],
+                ["GF",teamSummary.gf],["GA",teamSummary.ga],["GD",teamSummary.gd > 0 ? "+" + teamSummary.gd : teamSummary.gd],["Pts",teamSummary.points]
+              ].map(([k,v]) => <div key={String(k)}><b>{v}</b><small>{k}</small></div>)}</div>}
+            </section>
+            <section className="panel"><div className="section-heading"><h2>Form Guide</h2><span>Last 5</span></div>
+              {teamForm.length ? <div className="form-list">{teamForm.map(m => <div className="form-row" key={m.id}><span className={"form-badge form-"+m.result.toLowerCase()}>{m.result}</span><div><strong>{m.opponent}</strong><small>{m.score}</small></div></div>)}</div> : <p className="muted">No official matches yet.</p>}
+            </section>
+          </div>}
+          <section className="panel"><div className="section-heading"><h2>Player Statistics</h2><span>{teamId ? teamMap.get(teamId) : "All teams"}</span></div>
+            {playerStats.length ? <div className="table-wrap"><table><thead><tr><th>Player</th><th>Team</th><th>Goals</th><th>Yellow</th><th>Red</th></tr></thead><tbody>
+              {playerStats.map(x => <tr key={x.player.id}><td><strong>{x.player.full_name}</strong></td><td>{teamMap.get(x.player.team_id) || "Team"}</td><td>{x.goals}</td><td>{x.yellow}</td><td>{x.red}</td></tr>)}
+            </tbody></table></div> : <p className="muted">Player event statistics will appear here after official matches are recorded.</p>}
+          </section>
         )}
       </section>
     </main>
