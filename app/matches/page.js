@@ -23,7 +23,7 @@ export default function MatchesPage() {
   const [official, setOfficial] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
-  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().slice(0,10));
+  const [selectedDate, setSelectedDate] = useState(() => new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Accra",year:"numeric",month:"2-digit",day:"2-digit"}).format(new Date()));
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -44,7 +44,7 @@ export default function MatchesPage() {
     load();
   }, []);
 
-  const days = useMemo(() => { const out=[]; for(let i=0;i<8;i++){ const d=new Date(); d.setDate(d.getDate()+i); out.push({key:d.toISOString().slice(0,10), label:i===0?"Today":i===1?"Tomorrow":new Intl.DateTimeFormat("en-GH",{weekday:"short"}).format(d), date:new Intl.DateTimeFormat("en-GH",{day:"numeric",month:"short"}).format(d)}); } return out; }, []);
+  const days = useMemo(() => { const out=[]; for(let i=0;i<8;i++){ const d=new Date(); d.setDate(d.getDate()+i); out.push({key:new Intl.DateTimeFormat("en-CA",{timeZone:"Africa/Accra",year:"numeric",month:"2-digit",day:"2-digit"}).format(d), label:i===0?"Today":i===1?"Tomorrow":new Intl.DateTimeFormat("en-GH",{weekday:"short"}).format(d), date:new Intl.DateTimeFormat("en-GH",{day:"numeric",month:"short"}).format(d)}); } return out; }, []);
 
   const visible = useMemo(() => {
     const now = Date.now();
@@ -59,7 +59,7 @@ export default function MatchesPage() {
       if (filter === "results") return isOfficial && ["finished","verified"].includes(m.status);
       return isUpcoming || isLive || (isOfficial && ["finished","verified"].includes(m.status));
     }).sort((a,b) => new Date(a.scheduled_at) - new Date(b.scheduled_at));
-  }, [matches, official, filter]);
+  }, [matches, official, filter, selectedDate]);
 
   return <main>
     <section className="container page-hero">
