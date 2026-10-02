@@ -20,7 +20,7 @@ export default function ControlRoomPage(){
   const [team,setTeam]=useState({name:"",short_name:"",area:"",home_venue:"",image:null});
   const [player,setPlayer]=useState({team_id:"",full_name:"",shirt_number:"",position:"",image:null});
   const [coach,setCoach]=useState({team_id:"",full_name:"",date_of_birth:"",nationality:"",role:"Head Coach",image:null});
-  const [saving,setSaving]=useState(false),[statsCompetitionId,setStatsCompetitionId]=useState(""),[statsSeasonId,setStatsSeasonId]=useState(""),[officialStats,setOfficialStats]=useState([]),[statsData,setStatsData]=useState({standings:[],scorers:[],recent:[]}), [reportMatch,setReportMatch]=useState(null), [report,setReport]=useState(null), [reports,setReports]=useState([]),[liveMatch,setLiveMatch]=useState(null),[events,setEvents]=useState([]),[matchStats,setMatchStats]=useState(null),[clock,setClock]=useState(0),[eventForm,setEventForm]=useState({type:"goal",team_id:"",player_id:"",minute:"",extra_minute:"",details:""}),[lineupMatch,setLineupMatch]=useState(null),[lineupTeam,setLineupTeam]=useState(""),[lineup,setLineup]=useState(null),[lineupPlayers,setLineupPlayers]=useState([]),[lineupLoading,setLineupLoading]=useState(false);
+  const [saving,setSaving]=useState(false),[statsCompetitionId,setStatsCompetitionId]=useState(""),[statsSeasonId,setStatsSeasonId]=useState(""),[officialStats,setOfficialStats]=useState([]),[statsData,setStatsData]=useState({standings:[],scorers:[],recent:[],form:[]}), [reportMatch,setReportMatch]=useState(null), [report,setReport]=useState(null), [reports,setReports]=useState([]),[liveMatch,setLiveMatch]=useState(null),[events,setEvents]=useState([]),[matchStats,setMatchStats]=useState(null),[clock,setClock]=useState(0),[eventForm,setEventForm]=useState({type:"goal",team_id:"",player_id:"",minute:"",extra_minute:"",details:""}),[lineupMatch,setLineupMatch]=useState(null),[lineupTeam,setLineupTeam]=useState(""),[lineup,setLineup]=useState(null),[lineupPlayers,setLineupPlayers]=useState([]),[lineupLoading,setLineupLoading]=useState(false);
 
   useEffect(()=>{if(!liveMatch)return;const tick=()=>setClock(elapsed(liveMatch));tick();const id=setInterval(tick,1000);return()=>clearInterval(id);},[liveMatch]);
 
@@ -122,7 +122,7 @@ export default function ControlRoomPage(){
     const supabase=getSupabase(); if(!supabase)return;
     setError(""); setNotice("");
     const selectedSeasonIds=statsCompetitionId?seasons.filter(x=>x.competition_id===statsCompetitionId).map(x=>x.id):[];
-    if(statsCompetitionId&&!selectedSeasonIds.length){setStatsData({standings:[],scorers:[],recent:[]});setOfficialStats([]);setNotice("No seasons are registered for this competition yet.");return;}
+    if(statsCompetitionId&&!selectedSeasonIds.length){setStatsData({standings:[],scorers:[],recent:[],form:[]});setOfficialStats([]);setNotice("No seasons are registered for this competition yet.");return;}
     let matchQuery=supabase.from("matches").select("id,season_id,stage_id,scheduled_at,status,home_score,away_score,home_team_id,away_team_id,home:teams!matches_home_team_id_fkey(id,name),away:teams!matches_away_team_id_fkey(id,name)").in("status",["finished","verified"]).order("scheduled_at",{ascending:false});
     if(statsSeasonId)matchQuery=matchQuery.eq("season_id",statsSeasonId);
     else if(statsCompetitionId)matchQuery=matchQuery.in("season_id",selectedSeasonIds);
@@ -134,6 +134,24 @@ export default function ControlRoomPage(){
     const map={}; const ensure=(id,name)=>{if(!id)return null;if(!map[id])map[id]={team_id:id,team:name||"Unknown",played:0,wins:0,draws:0,losses:0,gf:0,ga:0,gd:0,points:0};return map[id];};
     (m.data||[]).forEach(x=>{const h=ensure(x.home_team_id,x.home?.name),a=ensure(x.away_team_id,x.away?.name);if(!h||!a)return;h.played++;a.played++;h.gf+=x.home_score||0;h.ga+=x.away_score||0;a.gf+=x.away_score||0;a.ga+=x.home_score||0;if((x.home_score||0)>(x.away_score||0)){h.wins++;h.points+=3;a.losses++;}else if((x.home_score||0)<(x.away_score||0)){a.wins++;a.points+=3;h.losses++;}else{h.draws++;a.draws++;h.points++;a.points++;}});
     Object.values(map).forEach(x=>x.gd=x.gf-x.ga);
+    const formMap={};
+    const ensureForm=(id,name)=>{
+      if(!id)return null;
+      if(!formMap[id])formMap[id]={team_id:id,team:name||"Unknown",matches:[],form:[]};
+      return formMap[id];
+    };
+    (m.data||[]).forEach(x=>{
+      const h=ensureForm(x.home_team_id,x.home?.name),a=ensureForm(x.away_team_id,x.away?.name);
+      if(!h||!a)return;
+      const hs=x.home_score||0, as=x.away_score||0;
+      h.matches.push({id:x.id,opponent:a.team,venue:"H",score:hs+"-"+as,date:x.scheduled_at,result:hs>as?"W":hs<as?"L":"D"});
+      a.matches.push({id:x.id,opponent:h.team,venue:"A",score:as+"-"+hs,date:x.scheduled_at,result:as>hs?"W":as<hs?"L":"D"});
+    });
+    Object.values(formMap).forEach(x=>{
+      x.matches.sort((a,b)=>new Date(b.date||0)-new Date(a.date||0));
+      x.form=x.matches.slice(0,5).map(y=>y.result);
+    });
+    const form=Object.values(formMap).filter(x=>x.matches.length).sort((a,b)=>b.matches.length-a.matches.length||a.team.localeCompare(b.team));
     const scorers={}; (e.data||[]).forEach(x=>{if(x.event_type!=="goal"||!x.player_id)return;const p=x.players;if(!scorers[x.player_id])scorers[x.player_id]={player_id:x.player_id,player:p?.full_name||"Unknown",shirt_number:p?.shirt_number||"",team:x.teams?.name||"Unknown",goals:0};scorers[x.player_id].goals++;});
     const statQuery=supabase.from("official_player_statistics").select("*, players(full_name,shirt_number), teams(name)").order("goals",{ascending:false}).order("minutes_played",{ascending:false});
     let oq=statQuery;
@@ -142,7 +160,7 @@ export default function ControlRoomPage(){
     const os=await oq;
     if(os.error){setError(os.error.message);return;}
     setOfficialStats(os.data||[]);
-    setStatsData({standings:Object.values(map).sort((a,b)=>b.points-a.points||b.gd-a.gd||b.gf-a.gf||a.team.localeCompare(b.team)),scorers:Object.values(scorers).sort((a,b)=>b.goals-a.goals||a.player.localeCompare(b.player)),recent:(m.data||[]).slice(0,10)});
+    setStatsData({standings:Object.values(map).sort((a,b)=>b.points-a.points||b.gd-a.gd||b.gf-a.gf||a.team.localeCompare(b.team)),scorers:Object.values(scorers).sort((a,b)=>b.goals-a.goals||a.player.localeCompare(b.player)),recent:(m.data||[]).slice(0,10),form});
   }
   async function loadReports(){
     const supabase=getSupabase(); if(!supabase)return;
@@ -259,6 +277,18 @@ export default function ControlRoomPage(){
             {!statsData.standings.length && <p className="muted">No finished or verified matches yet.</p>}
           </div>
           <div className="panel">
+            <h2>Team Form</h2>
+            <p className="muted">Last five completed matches in the selected competition/season, newest first.</p>
+            {statsData.form.map(x=>(
+              <div className="status-card" key={x.team_id}>
+                <b>{x.team}</b>
+                <div style={{display:"flex",gap:6,flexWrap:"wrap",marginTop:8}}>
+                  {x.form.map((r,i)=><span key={i} style={{minWidth:28,textAlign:"center",padding:"4px 7px",border:"1px solid #ddd",borderRadius:6,fontWeight:700}}>{r}</span>)}
+                </div>
+                <span>{x.matches.slice(0,5).map(y=>y.opponent+" ("+y.venue+") "+y.score).join(" · ")}</span>
+              </div>
+            ))}
+            {!statsData.form.length&&<p className="muted">No completed matches available for form yet.</p>}
             <h2>Top Scorers</h2>
             {statsData.scorers.map((x,i) => (
               <div className="status-card" key={x.player_id}>
