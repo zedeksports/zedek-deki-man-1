@@ -1,4 +1,5 @@
 import ControlRoomDashboard from "./control-room-dashboard";
+import ControlRoomShell from "./control-room-shell";
 
 const modules = [
   ["Competitions", "Manage competitions, formats and seasons.", "/control-room/competitions"],
@@ -12,36 +13,27 @@ const modules = [
   ["Newsroom", "Create, review, publish and archive stories.", "/control-room/newsroom"]
 ];
 
-export default function ControlRoomPage() {
+function Dashboard() {
   return (
     <main className="page">
       <header className="site-header">
         <div className="container nav">
           <a className="brand" href="/">ZEDEK <span>SPORTS</span></a>
-          <nav className="nav-links" aria-label="Control Room navigation">
-            <a href="/">Public Site</a>
-          </nav>
+          <nav className="nav-links" aria-label="Control Room navigation"><a href="/">Public Site</a></nav>
         </div>
       </header>
-
       <section className="container page-header">
-        <div className="eyebrow">Operations</div>
-        <h1>Control Room</h1>
+        <div className="eyebrow">Operations</div><h1>Control Room</h1>
         <p>The operational foundation for running local football accurately.</p>
       </section>
-
-      <section className="container section">
-        <ControlRoomDashboard />
-      </section>
-
+      <section className="container section"><ControlRoomDashboard /></section>
       <section className="container module-grid">
-        {modules.map(([title, description, href]) => (
-          <a className="module" href={href} key={title}>
-            <strong>{title}</strong>
-            <small>{description}</small>
-          </a>
-        ))}
+        {modules.map(([title, description, href]) => <a className="module" href={href} key={title}><strong>{title}</strong><small>{description}</small></a>)}
       </section>
     </main>
   );
+}
+
+export default function ControlRoomPage() {
+  return <ControlRoomShell><Dashboard /></ControlRoomShell>;
 }
