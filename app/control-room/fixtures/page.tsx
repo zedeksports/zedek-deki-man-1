@@ -8,7 +8,8 @@ type Stage={id:string;season_id:string;name:string;stage_type:string;is_active:b
 type Group={id:string;stage_id:string;name:string;group_order:number};
 type Team={id:string;name:string;area:string|null;is_active:boolean};
 type SeasonTeam={season_id:string;team_id:string};
-type Match={id:string;season_id:string;stage_id:string;group_id:string|null;home_team_id:string;away_team_id:string;scheduled_at:string|null;venue:string|null;round_name:string|null;leg:number|null;status:string;home_score:number;away_score:number;notes:string|null};
+type MatchStatus="scheduled"|"live"|"halftime"|"finished"|"postponed"|"cancelled"|"suspended"|"verified";
+type Match={id:string;season_id:string;stage_id:string;group_id:string|null;home_team_id:string;away_team_id:string;scheduled_at:string|null;venue:string|null;round_name:string|null;leg:number|null;status:MatchStatus;home_score:number;away_score:number;notes:string|null};
 
 const statuses=["scheduled","postponed","cancelled","suspended"];
 export default function FixturesPage(){
