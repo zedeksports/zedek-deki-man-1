@@ -57,17 +57,16 @@ export default function StatisticsPage() {
 
   async function loadSeason(id: string) {
     setError("");
-    const [matchRes, eventRes, registrationRes, stageRes, groupRes, stageTeamRes, statRes] = await Promise.all([
+    const [matchRes, eventRes, stageRes, groupRes, stageTeamRes, statRes] = await Promise.all([
       supabase.from("matches").select("id,season_id,stage_id,group_id,home_team_id,away_team_id,home_score,away_score,status,scheduled_at").eq("season_id", id).in("status", ["finished", "verified"]).order("scheduled_at", { ascending: false }),
       supabase.from("match_events").select("match_id,team_id,player_id,event_type,minute").in("event_type", ["goal", "own_goal", "yellow_card", "red_card"]),
-      supabase.from("season_teams").select("team_id").eq("season_id", id),
       supabase.from("stages").select("id,season_id,name,stage_type,display_order").eq("season_id", id).eq("is_active", true).order("display_order"),
       supabase.from("groups").select("id,stage_id,name").order("name"),
       supabase.from("stage_teams").select("stage_id,team_id"),
       supabase.from("match_statistics").select("*"),
     ]);
-    if (matchRes.error || eventRes.error || registrationRes.error || stageRes.error || groupRes.error || stageTeamRes.error || statRes.error) {
-      setError(matchRes.error?.message || eventRes.error?.message || registrationRes.error?.message || stageRes.error?.message || groupRes.error?.message || stageTeamRes.error?.message || statRes.error?.message || "Unable to load statistics.");
+    if (matchRes.error || eventRes.error || stageRes.error || groupRes.error || stageTeamRes.error || statRes.error) {
+      setError(matchRes.error?.message || eventRes.error?.message || stageRes.error?.message || groupRes.error?.message || stageTeamRes.error?.message || statRes.error?.message || "Unable to load statistics.");
       setLoading(false);
       return;
     }
@@ -225,8 +224,8 @@ export default function StatisticsPage() {
         {loading ? <div className="panel">Loading official statistics…</div> : !seasonId ? <div className="panel"><h2>No active season yet</h2><p>Create and activate a season in the Control Room to begin calculating official statistics.</p></div> : !stageId ? <div className="panel"><h2>No active stage yet</h2><p>Create and activate a stage for this season to calculate stage-aware standings.</p></div> : (
           <>
             <div className="stats-grid">
-              <section className="panel"><div className="section-heading"><h2>Standings</h2><span>{standings.length} teams</span></div>
-                {standings.length ? <div className="table-wrap"><table><thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>Pts</th></tr></thead><tbody>{standings.map((r,i)=><tr key={r.teamId}><td>{i+1}</td><td><strong>{teamMap.get(r.teamId) || "Unknown team"}</strong></td><td>{r.played}</td><td>{r.wins}</td><td>{r.draws}</td><td>{r.losses}</td><td>{r.gf-r.ga > 0 ? "+" : ""}{r.gf-r.ga}</td><td><strong>{r.points}</strong></td></tr>)}</tbody></table></div> : <p className="muted">No finished or verified matches for this stage.</p>}
+              <section className="panel"><div className="section-heading"><h2>{stages.find(s => s.id === stageId)?.stage_type === "knockout" || stages.find(s => s.id === stageId)?.stage_type === "quarter_final" || stages.find(s => s.id === stageId)?.stage_type === "semi_final" || stages.find(s => s.id === stageId)?.stage_type === "final" ? "Stage Results" : "Standings"}</h2><span>{standings.length} teams</span></div>
+                {(stages.find(s => s.id === stageId)?.stage_type === "knockout" || stages.find(s => s.id === stageId)?.stage_type === "quarter_final" || stages.find(s => s.id === stageId)?.stage_type === "semi_final" || stages.find(s => s.id === stageId)?.stage_type === "final") ? <p className="muted">Knockout stages do not use league standings. Use the match results and Knockout Manager for tie progression.</p> : standings.length ? <div className="table-wrap"><table><thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GD</th><th>Pts</th></tr></thead><tbody>{standings.map((r,i)=><tr key={r.teamId}><td>{i+1}</td><td><strong>{teamMap.get(r.teamId) || "Unknown team"}</strong></td><td>{r.played}</td><td>{r.wins}</td><td>{r.draws}</td><td>{r.losses}</td><td>{r.gf-r.ga > 0 ? "+" : ""}{r.gf-r.ga}</td><td><strong>{r.points}</strong></td></tr>)}</tbody></table></div> : <p className="muted">No finished or verified matches for this stage.</p>}
               </section>
               <section className="panel"><div className="section-heading"><h2>Top Scorers</h2><span>Goals</span></div>
                 {scorers.length ? <div className="rank-list">{scorers.map((x,i)=><div className="rank-row" key={x.player!.id}><span className="rank">{i+1}</span><div><strong>{x.player!.full_name}</strong><small>{teamMap.get(x.player!.team_id) || "Team"}</small></div><b>{x.goals}</b></div>)}</div> : <p className="muted">Goal events will appear here after official matches are recorded.</p>}
@@ -246,7 +245,7 @@ export default function StatisticsPage() {
               {playerStats.length ? <div className="table-wrap"><table><thead><tr><th>Player</th><th>Team</th><th>Goals</th><th>Yellow</th><th>Red</th></tr></thead><tbody>{playerStats.map(x => <tr key={x.player.id}><td><strong>{x.player.full_name}</strong></td><td>{teamMap.get(x.player.team_id) || "Team"}</td><td>{x.goals}</td><td>{x.yellow}</td><td>{x.red}</td></tr>)}</tbody></table></div> : <p className="muted">Player event statistics will appear here after official matches are recorded.</p>}
             </section>
 
-            <section className="panel"><div className="section-heading"><h2>Head-to-Head</h2><span>Historical official meetings</span></div>
+            <section className="panel"><div className="section-heading"><h2>Head-to-Head</h2><span>Current-season official meetings</span></div>
               <div className="stats-toolbar"><label>Team A<select value={h2hTeamA} onChange={e => setH2hTeamA(e.target.value)}><option value="">Select team</option>{seasonTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label><label>Team B<select value={h2hTeamB} onChange={e => setH2hTeamB(e.target.value)}><option value="">Select team</option>{seasonTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label></div>
               {h2hTeamA && h2hTeamB && h2hTeamA !== h2hTeamB ? <><div className="team-summary">{[["Played",h2hSummary.played],[teamMap.get(h2hTeamA)||"Team A",h2hSummary.aWins],["Draws",h2hSummary.draws],[teamMap.get(h2hTeamB)||"Team B",h2hSummary.bWins],["Goals A",h2hSummary.aGoals],["Goals B",h2hSummary.bGoals]].map(([k,v])=><div key={String(k)}><b>{v}</b><small>{k}</small></div>)}</div>{h2hMatches.length ? <div className="table-wrap"><table><thead><tr><th>Date</th><th>Match</th><th>Score</th></tr></thead><tbody>{h2hMatches.map(m=><tr key={m.id}><td>{new Date(m.scheduled_at).toLocaleDateString()}</td><td>{teamMap.get(m.home_team_id)} vs {teamMap.get(m.away_team_id)}</td><td><strong>{m.home_score}-{m.away_score}</strong></td></tr>)}</tbody></table></div> : <p className="muted">No official meetings recorded in this season.</p>}</> : <p className="muted">Select two different teams.</p>}
             </section>
