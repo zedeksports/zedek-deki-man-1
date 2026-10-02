@@ -54,17 +54,17 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="hero-panel" aria-label="Zedek Sports match preview">
-            <div className="panel-top"><span>ZEDEK MATCH CENTRE</span><b>LIVE</b></div>
+          <div className="hero-panel" aria-label="Zedek Sports football hub">
+            <div className="panel-top"><span>ZEDEK FOOTBALL HUB</span><b>OFFICIAL</b></div>
             <div className="match-preview">
-              <div className="match-meta">LOCAL FOOTBALL • TODAY</div>
-              <div className="teams-preview">
-                <div><div className="crest-placeholder">AC</div><strong>Dmk Ac Milan</strong></div>
-                <div className="score-preview"><small>FT</small><b>2 — 1</b></div>
-                <div><div className="crest-placeholder">MS</div><strong>Mountaineers</strong></div>
+              <div className="match-meta">LOCAL FOOTBALL • OTI</div>
+              <div className="hero-hub">
+                <div className="hero-hub-mark">Z</div>
+                <strong>Matches. Teams. Players.</strong>
+                <span>One place for verified local football information.</span>
               </div>
             </div>
-            <div className="panel-foot"><span>Official result</span><a href="/matches">Match centre →</a></div>
+            <div className="panel-foot"><span>Verified information</span><a href="/matches">Open Match Centre →</a></div>
           </div>
         </div>
       </section>
