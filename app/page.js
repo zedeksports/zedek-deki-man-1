@@ -40,6 +40,7 @@ export default function HomePage() {
           </div>
         </div>
       </header>
+      <div id="zedek-search" className="quick-search"><div className="container quick-search-inner"><span>⌕</span><input placeholder="Search teams, players, competitions or matches…" aria-label="Quick search" onKeyDown={e=>{if(e.key==="Enter"&&e.currentTarget.value.trim())window.location.href="/search?q="+encodeURIComponent(e.currentTarget.value.trim())}}/><a href="/search">Open full search →</a></div></div>
 
       <section className="hero-shell">
         <div className="container hero">
