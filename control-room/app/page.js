@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "../lib/supabase/browser";
 
-const TABS=["overview","competitions","seasons","stages","fixtures","live","lineups","review","stats","teams","players"];
+const TABS=["overview","competitions","seasons","stages","fixtures","live","lineups","review","stats","teams","players","coaches"];
 const STAGE_TYPES=["league","group","knockout","quarter_final","semi_final","final"];
 
 function getSupabase(){if(typeof window==="undefined")return null;return createSupabaseBrowserClient();}
@@ -12,29 +12,31 @@ function fmtDate(v){return v?new Date(v).toLocaleString():"—";}
 export default function ControlRoomPage(){
   const [loading,setLoading]=useState(true),[user,setUser]=useState(null),[profile,setProfile]=useState(null);
   const [tab,setTab]=useState("overview"),[error,setError]=useState(""),[notice,setNotice]=useState("");
-  const [competitions,setCompetitions]=useState([]),[seasons,setSeasons]=useState([]),[teams,setTeams]=useState([]),[players,setPlayers]=useState([]),[stages,setStages]=useState([]),[matches,setMatches]=useState([]);
+  const [competitions,setCompetitions]=useState([]),[seasons,setSeasons]=useState([]),[teams,setTeams]=useState([]),[players,setPlayers]=useState([]),[coaches,setCoaches]=useState([]),[stages,setStages]=useState([]),[matches,setMatches]=useState([]);
   const [competition,setCompetition]=useState({name:"",code:"",location:"",format:"league"});
   const [season,setSeason]=useState({competition_id:"",name:"",year:"",start_date:"",end_date:""});
   const [stage,setStage]=useState({season_id:"",name:"",stage_type:"league",stage_order:"1",is_active:true});
   const [fixture,setFixture]=useState({season_id:"",stage_id:"",home_team_id:"",away_team_id:"",scheduled_at:"",venue:"",round_name:"",leg:"1",notes:""});
   const [team,setTeam]=useState({name:"",short_name:"",area:"",home_venue:"",image:null});
   const [player,setPlayer]=useState({team_id:"",full_name:"",shirt_number:"",position:"",image:null});
+  const [coach,setCoach]=useState({team_id:"",full_name:"",date_of_birth:"",nationality:"",role:"Head Coach",image:null});
   const [saving,setSaving]=useState(false),[statsData,setStatsData]=useState({standings:[],scorers:[],recent:[]}), [reportMatch,setReportMatch]=useState(null), [report,setReport]=useState(null), [reports,setReports]=useState([]),[liveMatch,setLiveMatch]=useState(null),[events,setEvents]=useState([]),[matchStats,setMatchStats]=useState(null),[clock,setClock]=useState(0),[eventForm,setEventForm]=useState({type:"goal",team_id:"",player_id:"",minute:"",extra_minute:"",details:""}),[lineupMatch,setLineupMatch]=useState(null),[lineupTeam,setLineupTeam]=useState(""),[lineup,setLineup]=useState(null),[lineupPlayers,setLineupPlayers]=useState([]),[lineupLoading,setLineupLoading]=useState(false);
 
   useEffect(()=>{if(!liveMatch)return;const tick=()=>setClock(elapsed(liveMatch));tick();const id=setInterval(tick,1000);return()=>clearInterval(id);},[liveMatch]);
 
   async function refresh(){
     setError(""); const supabase=getSupabase(); if(!supabase)return;
-    const [a,b,c,d,e,f]=await Promise.all([
+    const [a,b,c,d,coachRows,e,f]=await Promise.all([
       supabase.from("competitions").select("*").order("name"),
       supabase.from("seasons").select("*, competitions(name)").order("created_at",{ascending:false}),
       supabase.from("teams").select("*").order("name"),
       supabase.from("players").select("*, teams(name)").order("full_name"),
+      supabase.from("coaches").select("*, team_coaches(team_id,is_current,teams(name))").order("full_name"),
       supabase.from("stages").select("*, seasons(name, competitions(name))").order("season_id").order("stage_order"),
       supabase.from("matches").select("*, home:teams!matches_home_team_id_fkey(name), away:teams!matches_away_team_id_fkey(name), seasons(name), stages(name)").order("scheduled_at",{ascending:true})
     ]);
-    const bad=[a,b,c,d,e,f].find(x=>x.error); if(bad){setError(bad.error.message);return;}
-    setCompetitions(a.data||[]);setSeasons(b.data||[]);setTeams(c.data||[]);setPlayers(d.data||[]);
+    const bad=[a,b,c,d,coachRows,e,f].find(x=>x.error); if(bad){setError(bad.error.message);return;}
+    setCompetitions(a.data||[]);setSeasons(b.data||[]);setTeams(c.data||[]);setPlayers(d.data||[]);setCoaches(coachRows.data||[]);
     setStages(e.data||[]);setMatches(f.data||[]);
   }
 
@@ -70,6 +72,29 @@ export default function ControlRoomPage(){
     try{const logo_url=await uploadAsset(team.image,"teams",inserted.data.id);if(logo_url){const updated=await supabase.from("teams").update({logo_url}).eq("id",inserted.data.id);if(updated.error)throw updated.error;}}
     catch(err){setSaving(false);setError("Team saved, but logo upload failed: "+err.message);await refresh();return;}
     setSaving(false);setTeam({name:"",short_name:"",area:"",home_venue:"",image:null});setNotice("Team registered successfully.");await refresh();
+  }
+  async function saveCoach(e){
+    e.preventDefault();setSaving(true);setError("");setNotice("");
+    const supabase=getSupabase();
+    const inserted=await supabase.from("coaches").insert({
+      full_name:coach.full_name.trim(),
+      date_of_birth:coach.date_of_birth||null,
+      nationality:coach.nationality.trim()||null,
+      role:coach.role.trim()||"Head Coach",
+      is_active:true
+    }).select("*").single();
+    if(inserted.error){setSaving(false);setError(inserted.error.message);return;}
+    try{
+      const photo_url=await uploadAsset(coach.image,"coaches",inserted.data.id);
+      if(photo_url){const updated=await supabase.from("coaches").update({photo_url}).eq("id",inserted.data.id);if(updated.error)throw updated.error;}
+      if(coach.team_id){
+        const old=await supabase.from("team_coaches").update({is_current:false,end_date:new Date().toISOString().slice(0,10)}).eq("team_id",coach.team_id).eq("is_current",true);
+        if(old.error)throw old.error;
+        const linked=await supabase.from("team_coaches").insert({team_id:coach.team_id,coach_id:inserted.data.id,start_date:new Date().toISOString().slice(0,10),is_current:true});
+        if(linked.error)throw linked.error;
+      }
+    }catch(err){setSaving(false);setError("Coach saved, but photo/team assignment failed: "+err.message);await refresh();return;}
+    setSaving(false);setCoach({team_id:"",full_name:"",date_of_birth:"",nationality:"",role:"Head Coach",image:null});setNotice("Coach registered successfully.");await refresh();
   }
   async function savePlayer(e){
     e.preventDefault();setSaving(true);setError("");setNotice("");
@@ -348,6 +373,28 @@ export default function ControlRoomPage(){
           <h2>Team registry</h2><label>Team name<input required value={team.name} onChange={e=>setTeam({...team,name:e.target.value})}/></label><label>Short name<input value={team.short_name} onChange={e=>setTeam({...team,short_name:e.target.value})}/></label><label>Area<input value={team.area} onChange={e=>setTeam({...team,area:e.target.value})}/></label><label>Home venue<input value={team.home_venue} onChange={e=>setTeam({...team,home_venue:e.target.value})}/></label><label>Team logo<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={e=>setTeam({...team,image:e.target.files?.[0]||null})}/></label>{team.image&&<span className="muted">Selected: {team.image.name}</span>}<button className="button primary" disabled={saving}>{saving?"Saving…":"Register team"}</button>
         </form>
         <div className="panel"><h2>Registered teams</h2>{teams.map(x=><div className="status-card" key={x.id} style={{display:"flex",alignItems:"center",gap:12}}>{x.logo_url?<img src={x.logo_url} alt="" style={{width:48,height:48,borderRadius:"50%",objectFit:"cover"}}/>:<div style={{width:48,height:48,borderRadius:"50%",border:"1px solid #ddd",display:"grid",placeItems:"center"}}>⚽</div>}<div><b>{x.name}</b><span>{x.short_name||"—"} · {x.area||"Oti"} · {x.home_venue||"Venue not set"}</span></div></div>)}{!teams.length&&<p className="muted">No teams yet.</p>}</div>
+      </div>}
+
+
+      {tab==="coaches"&&<div className="stats-grid">
+        <form className="panel form-stack" onSubmit={saveCoach}>
+          <h2>Coach registry</h2>
+          <label>Team<select value={coach.team_id} onChange={e=>setCoach({...coach,team_id:e.target.value})}><option value="">No team assignment</option>{teams.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+          <label>Full name<input required value={coach.full_name} onChange={e=>setCoach({...coach,full_name:e.target.value})}/></label>
+          <label>Role<select value={coach.role} onChange={e=>setCoach({...coach,role:e.target.value})}><option>Head Coach</option><option>Assistant Coach</option><option>Goalkeeping Coach</option><option>Fitness Coach</option><option>Team Manager</option></select></label>
+          <label>Date of birth<input type="date" value={coach.date_of_birth} onChange={e=>setCoach({...coach,date_of_birth:e.target.value})}/></label>
+          <label>Nationality<input value={coach.nationality} onChange={e=>setCoach({...coach,nationality:e.target.value})}/></label>
+          <label>Coach photo<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={e=>setCoach({...coach,image:e.target.files?.[0]||null})}/></label>
+          {coach.image&&<span className="muted">Selected: {coach.image.name}</span>}
+          <button className="button primary" disabled={saving}>{saving?"Saving…":"Register coach"}</button>
+        </form>
+        <div className="panel"><h2>Registered coaches</h2>
+          {coaches.map(x=>{const current=(x.team_coaches||[]).find(t=>t.is_current);return <div className="status-card" key={x.id} style={{display:"flex",alignItems:"center",gap:12}}>
+            {x.photo_url?<img src={x.photo_url} alt="" style={{width:48,height:48,borderRadius:"50%",objectFit:"cover"}}/>:<div style={{width:48,height:48,borderRadius:"50%",border:"1px solid #ddd",display:"grid",placeItems:"center"}}>🧑‍🏫</div>}
+            <div><b>{x.full_name}</b><span>{x.role} · {current?.teams?.name||"Unassigned"} · {x.is_active?"ACTIVE":"inactive"}</span></div>
+          </div>})}
+          {!coaches.length&&<p className="muted">No coaches yet.</p>}
+        </div>
       </div>}
 
       {tab==="players"&&<div className="stats-grid">
