@@ -14,7 +14,19 @@ export default function PlayersPage(){
  async function createPlayer(e:FormEvent){e.preventDefault();if(!teamId)return;setSaving(true);setError("");setNotice("");const s=createSupabaseBrowserClient();if(form.is_captain)await s.from("players").update({is_captain:false}).eq("team_id",teamId);const {error}=await s.from("players").insert({team_id:teamId,full_name:form.full_name.trim(),shirt_number:form.shirt_number?Number(form.shirt_number):null,position:form.position.trim()||null,date_of_birth:form.date_of_birth||null,is_captain:form.is_captain});if(error)setError(error.message);else{setForm({full_name:"",shirt_number:"",position:"",date_of_birth:"",is_captain:false});setNotice("Player added.");await load()}setSaving(false)}
  async function toggle(p:Player){const s=createSupabaseBrowserClient();const {error}=await s.from("players").update({is_active:!p.is_active}).eq("id",p.id);if(error)setError(error.message);else await load()}
  async function captain(p:Player){const s=createSupabaseBrowserClient();setError("");if(!p.is_captain)await s.from("players").update({is_captain:false}).eq("team_id",p.team_id);const {error}=await s.from("players").update({is_captain:!p.is_captain}).eq("id",p.id);if(error)setError(error.message);else{setNotice(p.is_captain?"Captain removed.":"Captain assigned.");await load()}}
- async function remove(p:Player){if(!window.confirm("Delete "+p.full_name+"? Historical match records may prevent deletion."))return;const s=createSupabaseBrowserClient();const {error}=await s.from("players").delete().eq("id",p.id);if(error)setError(error.message);else{setNotice("Player deleted.");await load()}}
+ async function remove(p:Player){
+ if(!window.confirm("Remove "+p.full_name+" from active use? If this player has historical records, ZEDEK SPORTS will archive them instead of deleting the record."))return;
+ const s=createSupabaseBrowserClient();
+ const [a,b,cq]=await Promise.all([
+  s.from("match_events").select("id",{count:"exact",head:true}).eq("player_id",p.id),
+  s.from("match_lineup_players").select("id",{count:"exact",head:true}).eq("player_id",p.id),
+  s.from("match_lineups").select("id",{count:"exact",head:true}).eq("captain_player_id",p.id)
+ ]);
+ if(a.error||b.error||cq.error){setError(a.error?.message||b.error?.message||cq.error?.message||"Could not check player history.");return}
+ const historical=(a.count||0)+(b.count||0)+(cq.count||0)>0;
+ const {error}=await s.from("players").update({is_active:false,is_captain:false}).eq("id",p.id);
+ if(error)setError(error.message);else{setNotice(historical?"Player archived because historical records exist.":"Player deactivated safely. The historical record is preserved.");await load()}
+}
  const visible=players.filter(p=>!teamId||p.team_id===teamId);
  return <main className="page"><header className="site-header"><div className="container nav"><a className="brand" href="/control-room">ZEDEK <span>SPORTS</span></a><nav className="nav-links"><a href="/control-room">Control Room</a><a href="/control-room/teams">Teams</a></nav></div></header>
  <section className="container page-header"><div className="eyebrow">Football Operations · Phase 2</div><h1>Players & Squads</h1><p>Build team squads now; these players will later feed lineups, match events and player statistics.</p></section>
@@ -26,6 +38,6 @@ export default function PlayersPage(){
  <label>Date of birth<input type="date" value={form.date_of_birth} onChange={e=>setForm({...form,date_of_birth:e.target.value})}/></label>
  <label><input type="checkbox" checked={form.is_captain} onChange={e=>setForm({...form,is_captain:e.target.checked})}/> Captain</label>
  <button className="button primary" disabled={saving||!teamId}>{saving?"Adding...":"Add player"}</button></form></div></section>
- <section className="container section"><div className="section-heading"><h2>Squad</h2><span>{visible.length} players</span></div>{loading?<p>Loading...</p>:visible.length===0?<div className="panel"><p>No players registered for this team yet.</p></div>:<div className="module-grid">{visible.map(p=><article className="module" key={p.id}><strong>{p.full_name}</strong><small>#{p.shirt_number??"—"} · {p.position||"Position not set"}{p.is_captain?" · Captain":""}</small><small>{p.is_active?"Active":"Inactive"}</small><div className="button-row"><button className="button" onClick={()=>captain(p)}>{p.is_captain?"Remove captain":"Make captain"}</button><button className="button" onClick={()=>toggle(p)}>{p.is_active?"Deactivate":"Activate"}</button><button className="button danger" onClick={()=>remove(p)}>Delete</button></div></article>)}</div>}</section>
+ <section className="container section"><div className="section-heading"><h2>Squad</h2><span>{visible.length} players</span></div>{loading?<p>Loading...</p>:visible.length===0?<div className="panel"><p>No players registered for this team yet.</p></div>:<div className="module-grid">{visible.map(p=><article className="module" key={p.id}><strong>{p.full_name}</strong><small>#{p.shirt_number??"—"} · {p.position||"Position not set"}{p.is_captain?" · Captain":""}</small><small>{p.is_active?"Active":"Inactive"}</small><div className="button-row"><button className="button" onClick={()=>captain(p)}>{p.is_captain?"Remove captain":"Make captain"}</button><button className="button" onClick={()=>toggle(p)}>{p.is_active?"Deactivate":"Activate"}</button><button className="button danger" onClick={()=>remove(p)}>{p.is_active?"Archive":"Keep archived"}</button></div></article>)}</div>}</section>
  {notice&&<div className="container success-box">{notice}</div>}{error&&<div className="container error-box">{error}</div>}</main>
 }
