@@ -57,16 +57,17 @@ export default function StatisticsPage() {
 
   async function loadSeason(id: string) {
     setError("");
-    const [matchRes, eventRes, registrationRes, stageRes, groupRes, statRes] = await Promise.all([
+    const [matchRes, eventRes, registrationRes, stageRes, groupRes, stageTeamRes, statRes] = await Promise.all([
       supabase.from("matches").select("id,season_id,stage_id,group_id,home_team_id,away_team_id,home_score,away_score,status,scheduled_at").eq("season_id", id).in("status", ["finished", "verified"]).order("scheduled_at", { ascending: false }),
       supabase.from("match_events").select("match_id,team_id,player_id,event_type,minute").in("event_type", ["goal", "own_goal", "yellow_card", "red_card"]),
       supabase.from("season_teams").select("team_id").eq("season_id", id),
       supabase.from("stages").select("id,season_id,name,stage_type,display_order").eq("season_id", id).eq("is_active", true).order("display_order"),
       supabase.from("groups").select("id,stage_id,name").order("name"),
+      supabase.from("stage_teams").select("stage_id,team_id"),
       supabase.from("match_statistics").select("*"),
     ]);
-    if (matchRes.error || eventRes.error || registrationRes.error || stageRes.error || groupRes.error || statRes.error) {
-      setError(matchRes.error?.message || eventRes.error?.message || registrationRes.error?.message || stageRes.error?.message || groupRes.error?.message || statRes.error?.message || "Unable to load statistics.");
+    if (matchRes.error || eventRes.error || registrationRes.error || stageRes.error || groupRes.error || stageTeamRes.error || statRes.error) {
+      setError(matchRes.error?.message || eventRes.error?.message || registrationRes.error?.message || stageRes.error?.message || groupRes.error?.message || stageTeamRes.error?.message || statRes.error?.message || "Unable to load statistics.");
       setLoading(false);
       return;
     }
@@ -74,10 +75,10 @@ export default function StatisticsPage() {
     const ids = new Set(loadedMatches.map(m => m.id));
     setMatches(loadedMatches);
     setEvents((eventRes.data || []).filter(e => ids.has(e.match_id)));
-    setRegisteredTeamIds((registrationRes.data || []).map(x => x.team_id));
     setStages(stageRes.data || []);
     const stageIds = new Set((stageRes.data || []).map(s => s.id));
     setGroups((groupRes.data || []).filter(g => stageIds.has(g.stage_id)));
+    setRegisteredTeamIds((stageTeamRes.data || []).filter(x => stageIds.has(x.stage_id)).map(x => x.team_id));
     setMatchStats((statRes.data || []).filter(s => ids.has(s.match_id)));
     setStageId(current => current && stageIds.has(current) ? current : (stageRes.data?.[0]?.id || ""));
     setGroupId("");
