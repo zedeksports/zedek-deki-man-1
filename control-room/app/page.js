@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "../lib/supabase/browser";
 
-const TABS=["overview","competitions","seasons","stages","fixtures","live","lineups","teams","players"];
+const TABS=["overview","competitions","seasons","stages","fixtures","live","lineups","review","stats","teams","players"];
 const STAGE_TYPES=["league","group","knockout","quarter_final","semi_final","final"];
 
 function getSupabase(){if(typeof window==="undefined")return null;return createSupabaseBrowserClient();}
@@ -47,10 +47,9 @@ export default function ControlRoomPage(){
       const p=await supabase.from("profiles").select("role,is_active,full_name").eq("id",session.data.session.user.id).maybeSingle();
       if(!mounted)return;
       if(p.error)setError(p.error.message); setProfile(p.data);
-      if(p.data&&p.data.is_active&&["super_admin","zedek_admin"].includes(p.data.role))await refresh();
+      if(p.data&&p.data.is_active&&["super_admin","zedek_admin"].includes(p.data.role)){await refresh();await loadReports();}
       setLoading(false);
     }
-    if(p.data&&p.data.is_active&&["super_admin","zedek_admin"].includes(p.data.role))await loadReports();
     boot(); return()=>{mounted=false};
 },[]);
 
