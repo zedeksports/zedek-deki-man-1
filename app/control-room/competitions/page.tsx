@@ -72,12 +72,12 @@ export default function CompetitionsPage() {
   }
 
   async function remove(item: Competition) {
-    if (!window.confirm(`Delete “${item.name}”? This is only allowed when no dependent records exist.`)) return;
+    if (!window.confirm(`Archive “${item.name}”? It will remain available for historical records.`)) return;
     setError("");
     const supabase = createSupabaseBrowserClient();
-    const { error } = await supabase.from("competitions").delete().eq("id", item.id);
+    const { error } = await supabase.from("competitions").update({ is_active: false }).eq("id", item.id);
     if (error) setError(error.message);
-    else { setNotice("Competition deleted."); await load(); }
+    else { setNotice("Competition archived."); await load(); }
   }
 
   return (
