@@ -19,21 +19,26 @@ export default function StatisticsPage() {
   const [matches, setMatches] = useState<Match[]>([]);
   const [events, setEvents] = useState<Event[]>([]);
   const [players, setPlayers] = useState<Player[]>([]);
+  const [registeredTeamIds, setRegisteredTeamIds] = useState<string[]>([]);
   const [seasonId, setSeasonId] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
   async function loadSeason(id: string) {
-    const [matchRes, eventRes] = await Promise.all([
+    const [matchRes, eventRes, registrationRes] = await Promise.all([
       supabase.from("matches").select("id,season_id,home_team_id,away_team_id,home_score,away_score,status").eq("season_id", id).in("status", ["finished", "verified"]),
       supabase.from("match_events").select("match_id,team_id,player_id,event_type,minute").in("event_type", ["goal", "own_goal"]),
+      supabase.from("season_teams").select("team_id").eq("season_id", id),
+      supabase.from("season_teams").select("team_id").eq("season_id", id),
     ]);
-    if (matchRes.error || eventRes.error) {
-      setError(matchRes.error?.message || eventRes.error?.message || "Unable to load statistics.");
+    if (matchRes.error || eventRes.error || registrationRes.error) {
+      setError(matchRes.error?.message || eventRes.error?.message || registrationRes.error?.message || "Unable to load statistics.");
     } else {
       setMatches(matchRes.data || []);
       const ids = new Set((matchRes.data || []).map(m => m.id));
       setEvents((eventRes.data || []).filter(e => ids.has(e.match_id)));
+      setRegisteredTeamIds((registrationRes.data || []).map(x => x.team_id));
+      setRegisteredTeamIds((registrationRes.data || []).map(x => x.team_id));
     }
     setLoading(false);
   }
@@ -73,6 +78,7 @@ export default function StatisticsPage() {
 
   const standings = useMemo(() => {
     const rows = new Map<string, { teamId: string; played: number; wins: number; draws: number; losses: number; gf: number; ga: number; points: number }>();
+    registeredTeamIds.forEach(id => rows.set(id, { teamId: id, played: 0, wins: 0, draws: 0, losses: 0, gf: 0, ga: 0, points: 0 }));
     matches.forEach(m => {
       for (const id of [m.home_team_id, m.away_team_id]) if (!rows.has(id)) rows.set(id, { teamId: id, played: 0, wins: 0, draws: 0, losses: 0, gf: 0, ga: 0, points: 0 });
       const h = rows.get(m.home_team_id)!; const a = rows.get(m.away_team_id)!;
@@ -82,11 +88,11 @@ export default function StatisticsPage() {
       else { h.draws++; a.draws++; h.points++; a.points++; }
     });
     return [...rows.values()].sort((a,b) => b.points-a.points || (b.gf-b.ga)-(a.gf-a.ga) || b.gf-a.gf || (teamMap.get(a.teamId)||"").localeCompare(teamMap.get(b.teamId)||""));
-  }, [matches, teamMap]);
+  }, [matches, teamMap, registeredTeamIds]);
 
   const scorers = useMemo(() => {
     const counts = new Map<string, number>();
-    events.forEach(e => { if (e.player_id) counts.set(e.player_id, (counts.get(e.player_id) || 0) + 1); });
+    events.forEach(e => { if (e.event_type === "goal" && e.player_id) counts.set(e.player_id, (counts.get(e.player_id) || 0) + 1); });
     return [...counts.entries()].map(([playerId, goals]) => ({ player: playerMap.get(playerId), goals })).filter(x => x.player).sort((a,b) => b.goals-a.goals || a.player!.full_name.localeCompare(b.player!.full_name)).slice(0, 10);
   }, [events, playerMap]);
 
