@@ -10,6 +10,7 @@ const modules = [
   ["Lineups", "Starting XI, substitutes, captain and formation.", "/control-room/lineups"],
   ["Reports & Verification", "Reports, corrections and official results.", "/control-room/reports"],
   ["Standings", "Automatic tables from official completed results.", "/control-room/standings"],
+  ["Qualification", "Move qualified teams into the next stage.", "/control-room/qualification"],
   ["Statistics Hub", "Official team, player and competition intelligence.", "/control-room/statistics"],
   ["Newsroom", "Create, review, publish and archive stories.", "/control-room/newsroom"]
 ];
