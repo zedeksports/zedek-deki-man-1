@@ -35,7 +35,7 @@ export default function HomePage() {
             {nav.map(([label, href]) => <a key={href} href={href}>{label}</a>)}
           </nav>
           <div className="header-actions">
-            <button className="icon-button" aria-label="Search Zedek Sports" title="Search">⌕</button>
+            <button className="icon-button" onClick={()=>document.getElementById("zedek-search")?.classList.toggle("open")} aria-label="Search Zedek Sports" title="Search">⌕</button>
             <button className="theme-button" onClick={toggleTheme} aria-label="Toggle day and night mode">{night ? "☀" : "☾"}</button>
           </div>
         </div>
