@@ -21,6 +21,8 @@ export default function ControlRoomPage(){
   const [player,setPlayer]=useState({team_id:"",full_name:"",shirt_number:"",position:""});
   const [saving,setSaving]=useState(false),[liveMatch,setLiveMatch]=useState(null),[events,setEvents]=useState([]),[matchStats,setMatchStats]=useState(null),[clock,setClock]=useState(0),[eventForm,setEventForm]=useState({type:"goal",team_id:"",player_id:"",minute:"",extra_minute:"",details:""});
 
+  useEffect(()=>{if(!liveMatch)return;const tick=()=>setClock(elapsed(liveMatch));tick();const id=setInterval(tick,1000);return()=>clearInterval(id);},[liveMatch]);
+
   async function refresh(){
     setError(""); const supabase=getSupabase(); if(!supabase)return;
     const [a,b,c,d,e,f]=await Promise.all([
