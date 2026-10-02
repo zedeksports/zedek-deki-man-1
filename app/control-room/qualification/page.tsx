@@ -22,6 +22,7 @@ export default function QualificationPage(){
  const [slot,setSlot]=useState("");
  const [message,setMessage]=useState("");
  const [error,setError]=useState("");
+ const [applying,setApplying]=useState(false);
 
  async function load(){
   const [a,b,c,d]=await Promise.all([
@@ -94,6 +95,24 @@ export default function QualificationPage(){
   setMessage(qualified.length+" qualification outcome(s) calculated and stored.");
  }
 
+ async function applyQualifications(){
+  setError("");setMessage("");setApplying(true);
+  try{
+   if(!seasonId||!toId){setError("Choose a season and destination stage.");return}
+   const {data:q,error:qe}=await s.from("stage_qualifications").select("*").eq("season_id",seasonId).eq("to_stage_id",toId).eq("status","qualified");
+   if(qe){setError(qe.message);return}
+   if(!q?.length){setError("No calculated qualified teams are ready to apply.");return}
+   const {data:existing,error:ee}=await s.from("stage_teams").select("team_id").eq("stage_id",toId);
+   if(ee){setError(ee.message);return}
+   const existingIds=new Set((existing||[]).map((x:any)=>x.team_id));
+   const rows=q.filter((x:any)=>!existingIds.has(x.team_id)).map((x:any)=>({stage_id:toId,team_id:x.team_id,group_id:null,seed:x.target_slot}));
+   if(rows.length){const {error:ie}=await s.from("stage_teams").insert(rows);if(ie){setError(ie.message);return}}
+   const {error:ue}=await s.from("stage_qualifications").update({status:"applied"}).in("id",q.map((x:any)=>x.id));
+   if(ue){setError(ue.message);return}
+   setMessage(rows.length+" qualified team(s) applied to the destination stage.");
+  }finally{setApplying(false)}
+ }
+
  const visibleRules=rules.filter(r=>seasonStages.some(s=>s.id===r.from_stage_id)||seasonStages.some(s=>s.id===r.to_stage_id));
 
  return <main className="page">
@@ -108,7 +127,7 @@ export default function QualificationPage(){
     <label>Source Position<input type="number" min="1" value={position} onChange={e=>setPosition(e.target.value)}/></label>
     <label>Target Slot (optional)<input type="number" min="1" value={slot} onChange={e=>setSlot(e.target.value)}/></label>
    </div>
-   <div className="button-row"><button className="button primary" onClick={addRule}>Save Rule</button><button className="button" onClick={calculate}>Calculate Qualification</button></div>
+   <div className="button-row"><button className="button primary" onClick={addRule}>Save Rule</button><button className="button" onClick={calculate}>Calculate Qualification</button><button className="button primary" onClick={applyQualifications} disabled={applying}>{applying?"Applying…":"Apply Qualified Teams"}</button></div>
    {message&&<div className="success-box">{message}</div>}{error&&<div className="error-box">{error}</div>}
   </div></section>
   <section className="container section"><div className="panel"><h2>Configured Rules</h2>
