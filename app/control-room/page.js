@@ -41,7 +41,7 @@ export default function ControlRoomPage() {
     setPlayers(d.data || []);
   }
 
-  const supabase = createSupabaseBrowserClient();
+  function getSupabase() {\n    if (typeof window === "undefined") return null;\n    return createSupabaseBrowserClient();\n  }
 
   useEffect(() => {
     let mounted = true;
@@ -68,7 +68,7 @@ export default function ControlRoomPage() {
     setSaving(true);
     setError("");
     setNotice("");
-    const result = await supabase.from(table).insert(values);
+    const supabase = getSupabase();\n    if (!supabase) return;\n    const result = await supabase.from(table).insert(values);
     setSaving(false);
     if (result.error) {
       setError(result.error.message);
@@ -80,7 +80,7 @@ export default function ControlRoomPage() {
   }
 
   async function signOut() {
-    await supabase.auth.signOut();
+    const supabase = getSupabase();\n    if (supabase) await supabase.auth.signOut();
     window.location.href = "/login";
   }
 
