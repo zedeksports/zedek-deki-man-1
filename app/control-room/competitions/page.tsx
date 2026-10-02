@@ -111,7 +111,7 @@ export default function CompetitionsPage() {
                 <small>{item.is_active ? "Active" : "Inactive"}</small>
                 <div className="button-row">
                   <button className="button" onClick={() => toggleActive(item)}>{item.is_active ? "Deactivate" : "Activate"}</button>
-                  <button className="button danger" onClick={() => remove(item)}>Delete</button>
+                  <button className="button danger" onClick={() => remove(item)} disabled={!item.is_active}>{item.is_active ? "Archive" : "Archived"}</button>
                 </div>
               </article>
             ))}
