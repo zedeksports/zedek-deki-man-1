@@ -3,15 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/browser";
 
-type Season = { id: string; name: string; year: number; competition_id: string };
+type Season = { id: string; name: string; year: number | null; competition_id: string };
 type Competition = { id: string; name: string };
 type Team = { id: string; name: string };
-type Stage = { id: string; season_id: string; name: string; stage_type: string; display_order: number };
+type Stage = { id: string; season_id: string; name: string; stage_type: string; stage_order: number };
 type Group = { id: string; stage_id: string; name: string };
 type Match = {
   id: string; season_id: string; stage_id: string; group_id: string | null;
   home_team_id: string; away_team_id: string; home_score: number; away_score: number;
-  status: string; scheduled_at: string;
+  status: string; scheduled_at: string | null;
 };
 type Event = { match_id: string; team_id: string; player_id: string | null; event_type: string; minute: number };
 type Player = { id: string; full_name: string; team_id: string };
@@ -60,7 +60,7 @@ export default function StatisticsPage() {
     const [matchRes, eventRes, stageRes, groupRes, stageTeamRes, statRes] = await Promise.all([
       supabase.from("matches").select("id,season_id,stage_id,group_id,home_team_id,away_team_id,home_score,away_score,status,scheduled_at").eq("season_id", id).in("status", ["finished", "verified"]).order("scheduled_at", { ascending: false }),
       supabase.from("match_events").select("match_id,team_id,player_id,event_type,minute").in("event_type", ["goal", "own_goal", "yellow_card", "red_card"]),
-      supabase.from("stages").select("id,season_id,name,stage_type,display_order").eq("season_id", id).eq("is_active", true).order("display_order"),
+      supabase.from("stages").select("id,season_id,name,stage_type,stage_order").eq("season_id", id).eq("is_active", true).order("stage_order"),
       supabase.from("groups").select("id,stage_id,name").order("name"),
       supabase.from("stage_teams").select("stage_id,team_id"),
       supabase.from("match_statistics").select("*"),
@@ -151,7 +151,7 @@ export default function StatisticsPage() {
   const teamForm = useMemo(() => {
     if (!teamId) return [];
     return matches.filter(m => (m.home_team_id === teamId || m.away_team_id === teamId) && m.stage_id === stageId && (!groupId || m.group_id === groupId))
-      .sort((a,b) => new Date(b.scheduled_at).getTime() - new Date(a.scheduled_at).getTime()).slice(0, 5)
+      .sort((a,b) => new Date(b.scheduled_at || 0).getTime() - new Date(a.scheduled_at || 0).getTime()).slice(0, 5)
       .map(m => {
         const home = m.home_team_id === teamId;
         const gf = home ? m.home_score : m.away_score; const ga = home ? m.away_score : m.home_score;
@@ -182,7 +182,7 @@ export default function StatisticsPage() {
   const h2hMatches = useMemo(() => {
     if (!h2hTeamA || !h2hTeamB || h2hTeamA === h2hTeamB) return [];
     return matches.filter(m => (m.home_team_id === h2hTeamA && m.away_team_id === h2hTeamB) || (m.home_team_id === h2hTeamB && m.away_team_id === h2hTeamA))
-      .sort((a,b) => new Date(b.scheduled_at).getTime() - new Date(a.scheduled_at).getTime());
+      .sort((a,b) => new Date(b.scheduled_at || 0).getTime() - new Date(a.scheduled_at || 0).getTime());
   }, [matches, h2hTeamA, h2hTeamB]);
 
   const h2hSummary = useMemo(() => {
@@ -247,11 +247,11 @@ export default function StatisticsPage() {
 
             <section className="panel"><div className="section-heading"><h2>Head-to-Head</h2><span>Current-season official meetings</span></div>
               <div className="stats-toolbar"><label>Team A<select value={h2hTeamA} onChange={e => setH2hTeamA(e.target.value)}><option value="">Select team</option>{seasonTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label><label>Team B<select value={h2hTeamB} onChange={e => setH2hTeamB(e.target.value)}><option value="">Select team</option>{seasonTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label></div>
-              {h2hTeamA && h2hTeamB && h2hTeamA !== h2hTeamB ? <><div className="team-summary">{[["Played",h2hSummary.played],[teamMap.get(h2hTeamA)||"Team A",h2hSummary.aWins],["Draws",h2hSummary.draws],[teamMap.get(h2hTeamB)||"Team B",h2hSummary.bWins],["Goals A",h2hSummary.aGoals],["Goals B",h2hSummary.bGoals]].map(([k,v])=><div key={String(k)}><b>{v}</b><small>{k}</small></div>)}</div>{h2hMatches.length ? <div className="table-wrap"><table><thead><tr><th>Date</th><th>Match</th><th>Score</th></tr></thead><tbody>{h2hMatches.map(m=><tr key={m.id}><td>{new Date(m.scheduled_at).toLocaleDateString()}</td><td>{teamMap.get(m.home_team_id)} vs {teamMap.get(m.away_team_id)}</td><td><strong>{m.home_score}-{m.away_score}</strong></td></tr>)}</tbody></table></div> : <p className="muted">No official meetings recorded in this season.</p>}</> : <p className="muted">Select two different teams.</p>}
+              {h2hTeamA && h2hTeamB && h2hTeamA !== h2hTeamB ? <><div className="team-summary">{[["Played",h2hSummary.played],[teamMap.get(h2hTeamA)||"Team A",h2hSummary.aWins],["Draws",h2hSummary.draws],[teamMap.get(h2hTeamB)||"Team B",h2hSummary.bWins],["Goals A",h2hSummary.aGoals],["Goals B",h2hSummary.bGoals]].map(([k,v])=><div key={String(k)}><b>{v}</b><small>{k}</small></div>)}</div>{h2hMatches.length ? <div className="table-wrap"><table><thead><tr><th>Date</th><th>Match</th><th>Score</th></tr></thead><tbody>{h2hMatches.map(m=><tr key={m.id}><td>{m.scheduled_at ? new Date(m.scheduled_at).toLocaleDateString() : "—"}</td><td>{teamMap.get(m.home_team_id)} vs {teamMap.get(m.away_team_id)}</td><td><strong>{m.home_score}-{m.away_score}</strong></td></tr>)}</tbody></table></div> : <p className="muted">No official meetings recorded in this season.</p>}</> : <p className="muted">Select two different teams.</p>}
             </section>
 
             <section className="panel"><div className="section-heading"><h2>Advanced Match Statistics</h2><span>{selectedMatch ? teamMap.get(selectedMatch.home_team_id)+" vs "+teamMap.get(selectedMatch.away_team_id) : "Official match"}</span></div>
-              <label>Match<select value={selectedMatchId} onChange={e => setSelectedMatchId(e.target.value)}><option value="">Select match</option>{filteredMatches.map(m => <option key={m.id} value={m.id}>{new Date(m.scheduled_at).toLocaleDateString()} · {teamMap.get(m.home_team_id)} {m.home_score}-{m.away_score} {teamMap.get(m.away_team_id)}</option>)}</select></label>
+              <label>Match<select value={selectedMatchId} onChange={e => setSelectedMatchId(e.target.value)}><option value="">Select match</option>{filteredMatches.map(m => <option key={m.id} value={m.id}>{m.scheduled_at ? new Date(m.scheduled_at).toLocaleDateString() : "—"} · {teamMap.get(m.home_team_id)} {m.home_score}-{m.away_score} {teamMap.get(m.away_team_id)}</option>)}</select></label>
               {selectedMatch && selectedStat ? <div className="table-wrap"><table><thead><tr><th>Metric</th><th>{teamMap.get(selectedMatch.home_team_id)}</th><th>{teamMap.get(selectedMatch.away_team_id)}</th></tr></thead><tbody>{[
                 ["Possession %",selectedStat.home_possession,selectedStat.away_possession],["Shots",selectedStat.home_shots,selectedStat.away_shots],["Shots on target",selectedStat.home_shots_on_target,selectedStat.away_shots_on_target],["Corners",selectedStat.home_corners,selectedStat.away_corners],["Fouls",selectedStat.home_fouls,selectedStat.away_fouls],["Offsides",selectedStat.home_offsides,selectedStat.away_offsides],["Saves",selectedStat.home_saves,selectedStat.away_saves],["Passes",selectedStat.home_passes,selectedStat.away_passes],["Pass accuracy %",selectedStat.home_pass_accuracy,selectedStat.away_pass_accuracy],["Crosses",selectedStat.home_crosses,selectedStat.away_crosses],["Free kicks",selectedStat.home_free_kicks,selectedStat.away_free_kicks],["Goal kicks",selectedStat.home_goal_kicks,selectedStat.away_goal_kicks],["Throw-ins",selectedStat.home_throw_ins,selectedStat.away_throw_ins],["xG",selectedStat.home_xg,selectedStat.away_xg]
               ].map(([label,home,away])=><tr key={String(label)}><td>{label}</td><td>{home ?? "—"}</td><td>{away ?? "—"}</td></tr>)}</tbody></table></div> : <p className="muted">{selectedMatch ? "No recorded advanced statistics for this match." : "Select an official match to view advanced statistics."}</p>}
