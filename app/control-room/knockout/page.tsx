@@ -24,6 +24,7 @@ export default function KnockoutPage(){
  const [awayId,setAwayId]=useState("");
  const [message,setMessage]=useState("");
  const [error,setError]=useState("");
+ const [generating,setGenerating]=useState(false);
 
  async function load(){
   const [a,b,c,d,e]=await Promise.all([
@@ -43,6 +44,42 @@ export default function KnockoutPage(){
  const seasonStages=useMemo(()=>stages.filter(x=>x.season_id===seasonId&&["knockout","quarter_final","semi_final","final"].includes(x.stage_type)),[stages,seasonId]);
  const stageTies=useMemo(()=>ties.filter(x=>x.stage_id===stageId),[ties,stageId]);
  const teamName=(id:string|null)=>teams.find(t=>t.id===id)?.name||"TBD";
+
+ async function generateBracket(){
+  setError("");setMessage("");setGenerating(true);
+  try{
+   if(!seasonId||!stageId){setError("Choose a season and knockout stage.");return}
+   if(stageTies.length){setError("This stage already has ties. Generate only on an empty knockout stage.");return}
+   const {data:registered,error:re}=await s.from("stage_teams").select("team_id").eq("stage_id",stageId);
+   if(re){setError(re.message);return}
+   const ids=(registered||[]).map((x:any)=>x.team_id).filter(Boolean);
+   if(ids.length<2){setError("At least two teams are required.");return}
+   if(ids.length%2!==0){setError("Automatic bracket generation currently requires an even number of teams.");return}
+   const tieRows:any[]=[];
+   for(let i=0;i<ids.length;i+=2){
+    const {data:t,error:te}=await s.from("knockout_ties").insert({season_id:seasonId,stage_id:stageId,tie_number:i/2+1,leg_count:1,home_team_id:ids[i],away_team_id:ids[i+1],status:"scheduled"}).select("*").single();
+    if(te||!t)throw new Error(te?.message||"Could not create tie.");
+    tieRows.push(t);
+    const {error:le}=await s.from("knockout_tie_legs").insert({tie_id:t.id,leg_number:1,home_team_id:ids[i],away_team_id:ids[i+1]});
+    if(le)throw new Error(le.message);
+   }
+   if(tieRows.length>1 && tieRows.length%2===0){
+    const nextStage=stages.filter(x=>x.season_id===seasonId).sort((a,b)=>a.stage_order-b.stage_order).find(x=>x.stage_order>(stages.find(y=>y.id===stageId)?.stage_order||0)&&["knockout","quarter_final","semi_final","final"].includes(x.stage_type));
+    if(nextStage){
+     const nextRows:any[]=[];
+     for(let i=0;i<tieRows.length;i+=2){
+      const {data:t,error:te}=await s.from("knockout_ties").insert({season_id:seasonId,stage_id:nextStage.id,tie_number:i/2+1,leg_count:1,status:"pending"}).select("*").single();
+      if(te||!t)throw new Error(te?.message||"Could not create next-stage tie.");
+      nextRows.push(t);
+     }
+     for(let i=0;i<tieRows.length;i++){const next=nextRows[Math.floor(i/2)];await s.from("knockout_ties").update({next_tie_id:next.id,next_slot:i%2===0?1:2}).eq("id",tieRows[i].id)}
+     setMessage("Bracket generated with the next-stage progression links.");
+    }else setMessage("Bracket generated. No later knockout stage exists yet.");
+   }else setMessage("Bracket generated.");
+   await load();
+  }catch(e:any){setError(e?.message||"Bracket generation failed.")}
+  finally{setGenerating(false)}
+ }
 
  async function createTie(){
   setError("");setMessage("");
@@ -134,7 +171,7 @@ export default function KnockoutPage(){
     <label>Home Team<select value={homeId} onChange={e=>setHomeId(e.target.value)}><option value="">TBD</option>{teams.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
     <label>Away Team<select value={awayId} onChange={e=>setAwayId(e.target.value)}><option value="">TBD</option>{teams.filter(x=>x.id!==homeId).map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
    </div>
-   <button className="button primary" onClick={createTie}>Create Knockout Tie</button>
+   <div className="button-row"><button className="button primary" onClick={createTie}>Create Knockout Tie</button><button className="button" onClick={generateBracket} disabled={generating}>{generating?"Generating…":"Generate Bracket from Stage Teams"}</button></div>
    {message&&<div className="success-box">{message}</div>}{error&&<div className="error-box">{error}</div>}
   </div></section>
   <section className="container section"><div className="panel"><h2>Stage Bracket</h2>
