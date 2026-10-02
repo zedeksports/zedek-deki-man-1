@@ -29,9 +29,27 @@ export default function MatchControlPage(){
  async function load(){setLoading(true);const s=createSupabaseBrowserClient();const [m,t,p]=await Promise.all([s.from("matches").select("id,home_team_id,away_team_id,scheduled_at,venue,status,home_score,away_score,round_name,notes").in("status",["scheduled","live","halftime","suspended","postponed"]).order("scheduled_at",{ascending:true,nullsFirst:false}),s.from("teams").select("id,name").order("name"),s.from("players").select("id,team_id,full_name,shirt_number").eq("is_active",true).order("full_name")]);if(m.error||t.error||p.error)setError(m.error?.message||t.error?.message||p.error?.message||"Could not load match control.");else{setMatches(m.data||[]);setTeams(t.data||[]);setPlayers(p.data||[]);if(!selected&&m.data?.length)setSelected(m.data[0].id)}setLoading(false)}
  async function selectMatch(id:string){setSelected(id);setError("");const s=createSupabaseBrowserClient();const [e,st]=await Promise.all([s.from("match_events").select("*").eq("match_id",id).order("created_at",{ascending:true}),s.from("match_statistics").select("*").eq("match_id",id).maybeSingle()]);if(e.error||st.error)setError(e.error?.message||st.error?.message||"Could not load match data.");else{setEvents(e.data||[]);setStats(st.data||{})}}
  useEffect(()=>{if(selected)selectMatch(selected)},[selected]);
- async function updateMatch(patch:Partial<Match>){if(!match)return;setBusy(true);setError("");const s=createSupabaseBrowserClient();const {error}=await s.from("matches").update(patch).eq("id",match.id);if(error)setError(error.message);else{setNotice("Match updated.");await load()}setBusy(false)}
+ async function updateMatch(patch:Partial<Match>){
+  if(!match)return;
+  setBusy(true);setError("");setNotice("");
+  const next=patch.status;
+  if(next==="finished"&&!["live","halftime"].includes(match.status)){setError("A match can only be finished from live or half-time.");setBusy(false);return}
+  if(next==="halftime"&&match.status!=="live"){setError("Half-time is only available during a live match.");setBusy(false);return}
+  if(next==="live"&&!["scheduled","halftime"].includes(match.status)){setError("Kickoff/resume is only available from scheduled or half-time.");setBusy(false);return}
+  const s=createSupabaseBrowserClient();
+  const {error}=await s.from("matches").update(patch).eq("id",match.id);
+  if(error)setError(error.message);else{setNotice("Match updated.");await load()}
+  setBusy(false)
+}
  function elapsed(){if(!match?.scheduled_at||match.status!=="live")return 0;return Math.max(0,Math.floor((now-new Date(match.scheduled_at).getTime())/60000))}
- async function addEvent(){if(!match||!eventTeam||!eventType)return;setBusy(true);setError("");const s=createSupabaseBrowserClient();const {error}=await s.from("match_events").insert({match_id:match.id,team_id:eventTeam,player_id:eventPlayer||null,event_type:eventType,minute:minute?Number(minute):elapsed(),extra_minute:extra?Number(extra):null,details:details.trim()||null});if(error)setError(error.message);else{if(eventType==="goal"||eventType==="own_goal"){const isHome=eventTeam===match.home_team_id;const field=eventType==="goal"?(isHome?"home_score":"away_score"):(isHome?"away_score":"home_score");const score=field==="home_score"?match.home_score:match.away_score;await s.from("matches").update({[field]:score+1}).eq("id",match.id)}setEventPlayer("");setMinute("");setExtra("");setDetails("");await selectMatch(match.id);await load()}setBusy(false)}
+ async function addEvent(){
+  if(!match||!eventTeam||!eventType)return;
+  if(!["live","halftime"].includes(match.status)){setError("Match events can only be recorded while live or at half-time.");return}
+  const m=minute?Number(minute):elapsed();
+  if(!Number.isInteger(m)||m<0||m>120){setError("Minute must be between 0 and 120.");return}
+  const x=extra?Number(extra):null;
+  if(x!==null&&(!Number.isInteger(x)||x<0||x>30)){setError("Added time must be between 0 and 30.");return}
+  setBusy(true);setError("");setNotice("");const s=createSupabaseBrowserClient();const {error}=await s.from("match_events").insert({match_id:match.id,team_id:eventTeam,player_id:eventPlayer||null,event_type:eventType,minute:m,extra_minute:x,details:details.trim()||null});if(error)setError(error.message);else{if(eventType==="goal"||eventType==="own_goal"){const isHome=eventTeam===match.home_team_id;const field=eventType==="goal"?(isHome?"home_score":"away_score"):(isHome?"away_score":"home_score");const score=field==="home_score"?match.home_score:match.away_score;await s.from("matches").update({[field]:score+1}).eq("id",match.id)}setEventPlayer("");setMinute("");setExtra("");setDetails("");await selectMatch(match.id);await load()}setBusy(false)}
  async function saveStats(){if(!match)return;setBusy(true);const s=createSupabaseBrowserClient();const payload={match_id:match.id,...Object.fromEntries(statFields.map(([k])=>[k,Number(stats[k]||0)])),updated_at:new Date().toISOString()};const {error}=await s.from("match_statistics").upsert(payload);if(error)setError(error.message);else setNotice("Live match statistics saved.");setBusy(false)}
  return <main className="page"><header className="site-header"><div className="container nav"><a className="brand" href="/control-room">ZEDEK <span>SPORTS</span></a><nav className="nav-links"><a href="/control-room/fixtures">Fixtures</a><a href="/control-room">Dashboard</a></nav></div></header>
  <section className="container page-header"><div className="eyebrow">Football Operations · Match Control</div><h1>Live Match Control</h1><p>Operate the match from kickoff through half-time and full-time, while recording events and live statistics.</p></section>
