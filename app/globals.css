@@ -252,3 +252,19 @@ textarea {
     grid-template-columns: 1fr;
   }
 }
+
+.status-card {
+  margin-bottom: 18px;
+  padding: 18px 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.status-card span {
+  color: var(--muted);
+  line-height: 1.5;
+}
