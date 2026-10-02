@@ -54,7 +54,7 @@ export default function ControlRoomDashboard() {
     ["Seasons", counts.seasons, "/control-room/seasons"],
     ["Teams", counts.teams, "/control-room/teams"],
     ["Players", counts.players, "/control-room/players"],
-    ["Matches", counts.matches, "/control-room/matches"]
+    ["Matches", counts.matches, "/control-room/fixtures"]
   ];
 
   return (
