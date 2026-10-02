@@ -3,7 +3,7 @@ import { useEffect,useState } from "react";
 import { createSupabaseBrowserClient } from "../../../lib/supabase/browser";
 type Match={id:string;home_team_id:string;away_team_id:string;status:string;home_score:number;away_score:number;scheduled_at:string|null};
 type Team={id:string;name:string};
-type Report={id:string;match_id:string;summary:string|null;incidents:string|null;status:string};
+type Report={id:string;match_id:string;summary:string|null;incidents:string|null;status:string;submitted_at:string|null};
 type Verification={id:string;match_id:string;corrections:string|null;notes:string|null;official_result:boolean;locked_at:string|null};
 export default function ReportsPage(){
  const [matches,setMatches]=useState<Match[]>([]),[teams,setTeams]=useState<Team[]>([]),[reports,setReports]=useState<Report[]>([]),[verifications,setVerifications]=useState<Verification[]>([]);
