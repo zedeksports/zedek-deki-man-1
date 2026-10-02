@@ -78,11 +78,11 @@ export default function SeasonsPage() {
   }
 
   async function remove(item: Season) {
-    if (!window.confirm(`Delete “${item.name}”? Deletion will fail if stages, matches, or other dependent records exist.`)) return;
+    if (!window.confirm(`Archive “${item.name}”? It will remain available for historical records.`)) return;
     setError(""); setNotice("");
     const supabase = createSupabaseBrowserClient();
-    const { error } = await supabase.from("seasons").delete().eq("id", item.id);
-    if (error) setError(error.message); else { setNotice("Season deleted."); await load(); }
+    const { error } = await supabase.from("seasons").update({ is_active: false }).eq("id", item.id);
+    if (error) setError(error.message); else { setNotice("Season archived."); await load(); }
   }
 
   const competitionName = (id: string) => competitions.find((c) => c.id === id)?.name ?? "Unknown competition";
