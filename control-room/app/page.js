@@ -20,7 +20,7 @@ export default function ControlRoomPage(){
   const [team,setTeam]=useState({name:"",short_name:"",area:"",home_venue:"",image:null});
   const [player,setPlayer]=useState({team_id:"",full_name:"",shirt_number:"",position:"",image:null});
   const [coach,setCoach]=useState({team_id:"",full_name:"",date_of_birth:"",nationality:"",role:"Head Coach",image:null});
-  const [saving,setSaving]=useState(false),[statsCompetitionId,setStatsCompetitionId]=useState(""),[statsSeasonId,setStatsSeasonId]=useState(""),[officialStats,setOfficialStats]=useState([]),[statsData,setStatsData]=useState({standings:[],scorers:[],recent:[],form:[]}), [reportMatch,setReportMatch]=useState(null), [report,setReport]=useState(null), [reports,setReports]=useState([]),[liveMatch,setLiveMatch]=useState(null),[events,setEvents]=useState([]),[matchStats,setMatchStats]=useState(null),[clock,setClock]=useState(0),[eventForm,setEventForm]=useState({type:"goal",team_id:"",player_id:"",minute:"",extra_minute:"",details:""}),[lineupMatch,setLineupMatch]=useState(null),[lineupTeam,setLineupTeam]=useState(""),[lineup,setLineup]=useState(null),[lineupPlayers,setLineupPlayers]=useState([]),[lineupLoading,setLineupLoading]=useState(false);
+  const [saving,setSaving]=useState(false),[statsCompetitionId,setStatsCompetitionId]=useState(""),[statsSeasonId,setStatsSeasonId]=useState(""),[officialStats,setOfficialStats]=useState([]),[statsData,setStatsData]=useState({standings:[],scorers:[],recent:[],form:[]}),[h2hHome,setH2hHome]=useState(""),[h2hAway,setH2hAway]=useState(""),[h2hData,setH2hData]=useState([]), [reportMatch,setReportMatch]=useState(null), [report,setReport]=useState(null), [reports,setReports]=useState([]),[liveMatch,setLiveMatch]=useState(null),[events,setEvents]=useState([]),[matchStats,setMatchStats]=useState(null),[clock,setClock]=useState(0),[eventForm,setEventForm]=useState({type:"goal",team_id:"",player_id:"",minute:"",extra_minute:"",details:""}),[lineupMatch,setLineupMatch]=useState(null),[lineupTeam,setLineupTeam]=useState(""),[lineup,setLineup]=useState(null),[lineupPlayers,setLineupPlayers]=useState([]),[lineupLoading,setLineupLoading]=useState(false);
 
   useEffect(()=>{if(!liveMatch)return;const tick=()=>setClock(elapsed(liveMatch));tick();const id=setInterval(tick,1000);return()=>clearInterval(id);},[liveMatch]);
 
@@ -162,6 +162,20 @@ export default function ControlRoomPage(){
     setOfficialStats(os.data||[]);
     setStatsData({standings:Object.values(map).sort((a,b)=>b.points-a.points||b.gd-a.gd||b.gf-a.gf||a.team.localeCompare(b.team)),scorers:Object.values(scorers).sort((a,b)=>b.goals-a.goals||a.player.localeCompare(b.player)),recent:(m.data||[]).slice(0,10),form});
   }
+  async function loadH2H(){
+    const supabase=getSupabase(); if(!supabase)return;
+    setError(""); setNotice("");
+    if(!h2hHome||!h2hAway||h2hHome===h2hAway){setH2hData([]);if(h2hHome===h2hAway&&h2hHome)setError("Select two different teams for H2H.");return;}
+    const selectedSeasonIds=statsCompetitionId?seasons.filter(x=>x.competition_id===statsCompetitionId).map(x=>x.id):[];
+    if(statsCompetitionId&&!selectedSeasonIds.length){setH2hData([]);setNotice("No seasons are registered for this competition yet.");return;}
+    let q=supabase.from("matches").select("id,season_id,stage_id,scheduled_at,status,home_score,away_score,home_team_id,away_team_id,home:teams!matches_home_team_id_fkey(id,name),away:teams!matches_away_team_id_fkey(id,name)").in("status",["finished","verified"]).order("scheduled_at",{ascending:false});
+    if(statsSeasonId)q=q.eq("season_id",statsSeasonId); else if(statsCompetitionId)q=q.in("season_id",selectedSeasonIds);
+    const r=await q.or("home_team_id.eq."+h2hHome+",away_team_id.eq."+h2hHome);
+    if(r.error){setError(r.error.message);return;}
+    const rows=(r.data||[]).filter(x=>(x.home_team_id===h2hHome&&x.away_team_id===h2hAway)||(x.home_team_id===h2hAway&&x.away_team_id===h2hHome));
+    setH2hData(rows);
+  }
+
   async function loadReports(){
     const supabase=getSupabase(); if(!supabase)return;
     const r=await supabase.from("match_reports").select("*,match:matches(id,home_score,away_score,home:teams!matches_home_team_id_fkey(name),away:teams!matches_away_team_id_fkey(name))").order("created_at",{ascending:false});
@@ -289,6 +303,15 @@ export default function ControlRoomPage(){
               </div>
             ))}
             {!statsData.form.length&&<p className="muted">No completed matches available for form yet.</p>}
+            <h2>Head-to-Head</h2>
+            <p className="muted">Completed meetings between the selected teams in the current competition/season scope.</p>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+              <select value={h2hHome} onChange={e=>{setH2hHome(e.target.value);setH2hData([]);}}><option value="">Team 1</option>{teams.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select>
+              <select value={h2hAway} onChange={e=>{setH2hAway(e.target.value);setH2hData([]);}}><option value="">Team 2</option>{teams.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select>
+            </div>
+            <button className="button primary" style={{marginTop:8}} onClick={loadH2H}>Load H2H</button>
+            {h2hData.map(x=><div className="status-card" key={x.id}><b>{x.home?.name} {x.home_score??0} — {x.away_score??0} {x.away?.name}</b><span>{fmtDate(x.scheduled_at)} · {x.status}</span></div>)}
+            {!h2hData.length&&h2hHome&&h2hAway&&<p className="muted">No completed meetings found for the selected scope.</p>}
             <h2>Top Scorers</h2>
             {statsData.scorers.map((x,i) => (
               <div className="status-card" key={x.player_id}>
