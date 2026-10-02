@@ -1,5 +1,6 @@
-import HomeLiveData from "./HomeLiveData";
 'use client';
+
+import HomeLiveData from "./HomeLiveData";
 
 import { useEffect, useState } from "react";
 
