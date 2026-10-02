@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { createSupabaseBrowserClient } from "../../../lib/supabase/browser";
 
-type Match={id:string;home_team_id:string;away_team_id:string;scheduled_at:string|null;venue:string|null;status:string;home_score:number;away_score:number;round_name:string|null;notes:string|null};
+type MatchStatus="scheduled"|"live"|"halftime"|"finished"|"postponed"|"cancelled"|"suspended"|"verified";
+type Match={id:string;home_team_id:string;away_team_id:string;scheduled_at:string|null;venue:string|null;status:MatchStatus;home_score:number;away_score:number;round_name:string|null;notes:string|null};
 type Team={id:string;name:string};
 type Event={id:string;match_id:string;team_id:string|null;player_id:string|null;event_type:string;minute:number|null;extra_minute:number|null;details:string|null};
 type Player={id:string;team_id:string;full_name:string;shirt_number:number|null};
