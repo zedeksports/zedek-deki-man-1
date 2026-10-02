@@ -19,7 +19,7 @@ export default function ControlRoomPage(){
   const [fixture,setFixture]=useState({season_id:"",stage_id:"",home_team_id:"",away_team_id:"",scheduled_at:"",venue:"",round_name:"",leg:"1",notes:""});
   const [team,setTeam]=useState({name:"",short_name:"",area:"",home_venue:""});
   const [player,setPlayer]=useState({team_id:"",full_name:"",shirt_number:"",position:""});
-  const [saving,setSaving]=useState(false),[liveMatch,setLiveMatch]=useState(null),[events,setEvents]=useState([]),[matchStats,setMatchStats]=useState(null),[clock,setClock]=useState(0),[eventForm,setEventForm]=useState({type:"goal",team_id:"",player_id:"",minute:"",extra_minute:"",details:""}),[lineupMatch,setLineupMatch]=useState(null),[lineupTeam,setLineupTeam]=useState(""),[lineup,setLineup]=useState(null),[lineupPlayers,setLineupPlayers]=useState([]),[lineupLoading,setLineupLoading]=useState(false);
+  const [saving,setSaving]=useState(false), [reportMatch,setReportMatch]=useState(null), [report,setReport]=useState(null), [reports,setReports]=useState([]),[liveMatch,setLiveMatch]=useState(null),[events,setEvents]=useState([]),[matchStats,setMatchStats]=useState(null),[clock,setClock]=useState(0),[eventForm,setEventForm]=useState({type:"goal",team_id:"",player_id:"",minute:"",extra_minute:"",details:""}),[lineupMatch,setLineupMatch]=useState(null),[lineupTeam,setLineupTeam]=useState(""),[lineup,setLineup]=useState(null),[lineupPlayers,setLineupPlayers]=useState([]),[lineupLoading,setLineupLoading]=useState(false);
 
   useEffect(()=>{if(!liveMatch)return;const tick=()=>setClock(elapsed(liveMatch));tick();const id=setInterval(tick,1000);return()=>clearInterval(id);},[liveMatch]);
 
@@ -51,7 +51,8 @@ export default function ControlRoomPage(){
       setLoading(false);
     }
     boot(); return()=>{mounted=false};
-  },[]);
+    loadReports();
+},[]);
 
   async function save(table,values,reset){
     setSaving(true);setError("");setNotice("");const supabase=getSupabase();
@@ -60,7 +61,34 @@ export default function ControlRoomPage(){
     if(result.error){setError(result.error.message);return;}
     reset();setNotice("Saved successfully.");await refresh();
   }
-  async function loadLive(id){ const supabase=getSupabase(); if(!supabase)return; const [ev,st]=await Promise.all([supabase.from("match_events").select("*, teams(name), players(full_name,shirt_number)").eq("match_id",id).order("created_at",{ascending:false}),supabase.from("match_statistics").select("*").eq("match_id",id).maybeSingle()]); if(ev.error)setError(ev.error.message); else setEvents(ev.data||[]); if(st.error)setError(st.error.message); else setMatchStats(st.data||null); }\n  function elapsed(m){ if(!m)return 0; const now=Date.now(); const kickoff=m.kickoff_at?new Date(m.kickoff_at).getTime():0; if(!kickoff)return 0; const halftime=m.halftime_at?new Date(m.halftime_at).getTime():0; const secondHalf=m.second_half_at?new Date(m.second_half_at).getTime():0; const finished=m.finished_at?new Date(m.finished_at).getTime():0; if(m.status==="scheduled")return 0; if(m.status==="live"){ if(secondHalf){ const firstHalfEnd=halftime||secondHalf; const first=Math.max(0,firstHalfEnd-kickoff); const second=Math.max(0,now-secondHalf); return Math.floor((first+second)/1000); } return Math.floor(Math.max(0,now-kickoff)/1000); } if(m.status==="halftime"){ const end=halftime||now; return Math.floor(Math.max(0,end-kickoff)/1000); } if(m.status==="finished"){ if(secondHalf){ const firstHalfEnd=halftime||secondHalf; const first=Math.max(0,firstHalfEnd-kickoff); const second=Math.max(0,(finished||now)-secondHalf); return Math.floor((first+second)/1000); } return Math.floor(Math.max(0,(finished||now)-kickoff)/1000); } return 0; }\n  function displayClock(sec){const min=Math.floor(sec/60),s=sec%60;return String(min).padStart(2,"0")+":"+String(s).padStart(2,"0");}\n  async function clockAction(m,action){ const now=new Date().toISOString(); let values={}; if(action==="start")values={status:"live",kickoff_at:now,halftime_at:null,second_half_at:null,finished_at:null}; if(action==="halftime")values={status:"halftime",halftime_at:now}; if(action==="resume")values={status:"live",second_half_at:now}; if(action==="finish")values={status:"finished",finished_at:now}; await updateMatch(m.id,values); setLiveMatch({...m,...values}); }\n  async function addEvent(){ if(!liveMatch)return; const supabase=getSupabase(); setSaving(true); const minute=eventForm.minute?Number(eventForm.minute):Math.floor(clock/60); const result=await supabase.from("match_events").insert({match_id:liveMatch.id,team_id:eventForm.team_id||null,player_id:eventForm.player_id||null,event_type:eventForm.type,minute,extra_minute:eventForm.extra_minute?Number(eventForm.extra_minute):null,details:eventForm.details||null}); if(result.error){setError(result.error.message);setSaving(false);return;} if(eventForm.type==="goal"&&eventForm.team_id){const home=eventForm.team_id===liveMatch.home_team_id; const values=home?{home_score:(liveMatch.home_score||0)+1}:{away_score:(liveMatch.away_score||0)+1}; await updateMatch(liveMatch.id,values); setLiveMatch({...liveMatch,...values});} setEventForm({type:"goal",team_id:"",player_id:"",minute:"",extra_minute:"",details:""});setSaving(false);await loadLive(liveMatch.id); }\n  async function loadLineup(matchId,teamId){
+  async function loadLive(id){ const supabase=getSupabase(); if(!supabase)return; const [ev,st]=await Promise.all([supabase.from("match_events").select("*, teams(name), players(full_name,shirt_number)").eq("match_id",id).order("created_at",{ascending:false}),supabase.from("match_statistics").select("*").eq("match_id",id).maybeSingle()]); if(ev.error)setError(ev.error.message); else setEvents(ev.data||[]); if(st.error)setError(st.error.message); else setMatchStats(st.data||null); }\n  function elapsed(m){ if(!m)return 0; const now=Date.now(); const kickoff=m.kickoff_at?new Date(m.kickoff_at).getTime():0; if(!kickoff)return 0; const halftime=m.halftime_at?new Date(m.halftime_at).getTime():0; const secondHalf=m.second_half_at?new Date(m.second_half_at).getTime():0; const finished=m.finished_at?new Date(m.finished_at).getTime():0; if(m.status==="scheduled")return 0; if(m.status==="live"){ if(secondHalf){ const firstHalfEnd=halftime||secondHalf; const first=Math.max(0,firstHalfEnd-kickoff); const second=Math.max(0,now-secondHalf); return Math.floor((first+second)/1000); } return Math.floor(Math.max(0,now-kickoff)/1000); } if(m.status==="halftime"){ const end=halftime||now; return Math.floor(Math.max(0,end-kickoff)/1000); } if(m.status==="finished"){ if(secondHalf){ const firstHalfEnd=halftime||secondHalf; const first=Math.max(0,firstHalfEnd-kickoff); const second=Math.max(0,(finished||now)-secondHalf); return Math.floor((first+second)/1000); } return Math.floor(Math.max(0,(finished||now)-kickoff)/1000); } return 0; }\n  function displayClock(sec){const min=Math.floor(sec/60),s=sec%60;return String(min).padStart(2,"0")+":"+String(s).padStart(2,"0");}\n  async function clockAction(m,action){ const now=new Date().toISOString(); let values={}; if(action==="start")values={status:"live",kickoff_at:now,halftime_at:null,second_half_at:null,finished_at:null}; if(action==="halftime")values={status:"halftime",halftime_at:now}; if(action==="resume")values={status:"live",second_half_at:now}; if(action==="finish")values={status:"finished",finished_at:now}; await updateMatch(m.id,values); setLiveMatch({...m,...values}); }\n  async function addEvent(){ if(!liveMatch)return; const supabase=getSupabase(); setSaving(true); const minute=eventForm.minute?Number(eventForm.minute):Math.floor(clock/60); const result=await supabase.from("match_events").insert({match_id:liveMatch.id,team_id:eventForm.team_id||null,player_id:eventForm.player_id||null,event_type:eventForm.type,minute,extra_minute:eventForm.extra_minute?Number(eventForm.extra_minute):null,details:eventForm.details||null}); if(result.error){setError(result.error.message);setSaving(false);return;} if(eventForm.type==="goal"&&eventForm.team_id){const home=eventForm.team_id===liveMatch.home_team_id; const values=home?{home_score:(liveMatch.home_score||0)+1}:{away_score:(liveMatch.away_score||0)+1}; await updateMatch(liveMatch.id,values); setLiveMatch({...liveMatch,...values});} setEventForm({type:"goal",team_id:"",player_id:"",minute:"",extra_minute:"",details:""});setSaving(false);await loadLive(liveMatch.id); }\n  async function loadReports(){
+    const supabase=getSupabase(); if(!supabase)return;
+    const r=await supabase.from("match_reports").select("*,match:matches(id,home_score,away_score,home:teams!matches_home_team_id_fkey(name),away:teams!matches_away_team_id_fkey(name))").order("created_at",{ascending:false});
+    if(!r.error)setReports(r.data||[]);
+  }
+  async function saveReport(){
+    if(!reportMatch)return;
+    const supabase=getSupabase(); setSaving(true);setError("");setNotice("");
+    const payload={match_id:reportMatch.id,summary:report?.summary||"",incidents:report?.incidents||"",submitted_at:new Date().toISOString(),status:"submitted"};
+    const r=await supabase.from("match_reports").upsert(payload,{onConflict:"match_id"}).select("*,match:matches(id,home_score,away_score,home:teams!matches_home_team_id_fkey(name),away:teams!matches_away_team_id_fkey(name))").single();
+    setSaving(false); if(r.error){setError(r.error.message);return;} setReport(r.data);setNotice("Report submitted for verification.");await loadReports();
+  }
+  async function verifyReport(r){
+    const supabase=getSupabase();setSaving(true);setError("");setNotice("");
+    const {data:{user}}=await supabase.auth.getUser();
+    const v=await supabase.from("match_verifications").upsert({match_id:r.match_id,verified_by:user?.id||null,verified_at:new Date().toISOString(),official_result:true,locked_at:new Date().toISOString()},{onConflict:"match_id"});
+    if(v.error){setError(v.error.message);setSaving(false);return;}
+    const m=await supabase.from("matches").update({status:"verified"}).eq("id",r.match_id);
+    if(m.error){setError(m.error.message);setSaving(false);return;}
+    await supabase.from("match_reports").update({status:"verified",updated_at:new Date().toISOString()}).eq("id",r.id);
+    setSaving(false);setNotice("Official result verified and locked.");await loadReports();
+  }
+  async function rejectReport(r){
+    const supabase=getSupabase();setSaving(true);setError("");setNotice("");
+    const x=await supabase.from("match_reports").update({status:"rejected",updated_at:new Date().toISOString()}).eq("id",r.id);
+    setSaving(false);if(x.error){setError(x.error.message);return;}setNotice("Report rejected and returned for correction.");await loadReports();
+  }
+  async function loadLineup(matchId,teamId){
     const supabase=getSupabase(); if(!supabase)return;
     setLineupLoading(true); setError("");
     const existing=await supabase.from("match_lineups").select("*").eq("match_id",matchId).eq("team_id",teamId).maybeSingle();
@@ -203,7 +231,34 @@ export default function ControlRoomPage(){
           </div>}
         </div>
       </div>}
-      {tab==="teams"&&<div className="stats-grid">
+      {tab==="review"&&<div className="stats-grid">
+  <div className="panel">
+    <h2>Reporter / Match Reports</h2>
+    <p className="muted">Create and submit an official report for a completed match.</p>
+    <label>Match<select value={reportMatch?.id||""} onChange={e=>{const m=matches.find(x=>x.id===e.target.value);setReportMatch(m||null);setReport(null);}}><option value="">Select finished match</option>{matches.filter(x=>x.status==="finished"||x.status==="verified").map(x=><option key={x.id} value={x.id}>{x.home?.name} {x.home_score} - {x.away_score} {x.away?.name}</option>)}</select></label>
+    {reportMatch&&<div className="form-stack" style={{marginTop:16}}>
+      <label>Summary<textarea rows="5" value={report?.summary||""} onChange={e=>setReport({...report,summary:e.target.value})}/></label>
+      <label>Incidents<textarea rows="7" value={report?.incidents||""} onChange={e=>setReport({...report,incidents:e.target.value})}/></label>
+      <button className="button primary" disabled={saving} onClick={saveReport}>Save / Submit Report</button>
+      {report?.status&&<p className="muted">Current status: {report.status}</p>}
+    </div>}
+  </div>
+  <div className="panel">
+    <h2>Verification Queue</h2>
+    <p className="muted">Review submitted reports and lock official results after verification.</p>
+    <div className="form-stack">{reports.map(r=><div key={r.id} className="status-card">
+      <b>{r.match?.home?.name} {r.match?.home_score} - {r.match?.away_score} {r.match?.away?.name}</b>
+      <p className="muted">{r.status} · {r.submitted_at?new Date(r.submitted_at).toLocaleString():"Not submitted"}</p>
+      <p>{r.summary||"No summary yet."}</p>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+        <button className="button" onClick={()=>setReport(r)}>Open</button>
+        <button className="button primary" disabled={saving||r.status==="verified"} onClick={()=>verifyReport(r)}>Verify & Lock</button>
+        <button className="button" disabled={saving||r.status==="rejected"} onClick={()=>rejectReport(r)}>Reject</button>
+      </div>
+    </div>)}{!reports.length&&<p className="muted">No reports in the queue.</p>}</div>
+  </div>
+</div>}
+{tab==="teams"&&<div className="stats-grid">
         <form className="panel form-stack" onSubmit={e=>{e.preventDefault();save("teams",{name:team.name.trim(),short_name:team.short_name.trim()||null,area:team.area.trim()||null,home_venue:team.home_venue.trim()||null},()=>setTeam({name:"",short_name:"",area:"",home_venue:""}));}}>
           <h2>Team registry</h2><label>Team name<input required value={team.name} onChange={e=>setTeam({...team,name:e.target.value})}/></label><label>Short name<input value={team.short_name} onChange={e=>setTeam({...team,short_name:e.target.value})}/></label><label>Area<input value={team.area} onChange={e=>setTeam({...team,area:e.target.value})}/></label><label>Home venue<input value={team.home_venue} onChange={e=>setTeam({...team,home_venue:e.target.value})}/></label><button className="button primary" disabled={saving}>Register team</button>
         </form>
