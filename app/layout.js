@@ -1,7 +1,7 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "ZEDEK SPORTS SCORE",
+  title: "ZEDEK SPORTS",
   description: "The home of local football in Ghana and Oti."
 };
 
