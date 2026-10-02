@@ -3,12 +3,14 @@
 import {useEffect,useState} from "react";
 import {createSupabaseBrowserClient} from "../../lib/supabase/browser";
 
+function initialQuery(){ if(typeof window==="undefined") return ""; return new URLSearchParams(window.location.search).get("q")||""; }
+
 function Logo({url,label}) {
   return <div className="search-logo">{url ? <img src={url} alt="" /> : <span>{(label||"Z").slice(0,2).toUpperCase()}</span>}</div>;
 }
 
 export default function SearchPage() {
-  const [q,setQ]=useState("");
+  const [q,setQ]=useState(initialQuery);
   const [results,setResults]=useState({teams:[],players:[],competitions:[],matches:[]});
   const [loading,setLoading]=useState(false);
   const [error,setError]=useState("");
