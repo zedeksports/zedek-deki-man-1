@@ -84,11 +84,11 @@ export default function StagesPage() {
   }
 
   async function remove(item: Stage) {
-    if (!window.confirm(`Delete “${item.name}”? Deletion will fail if groups, fixtures or other dependent records exist.`)) return;
+    if (!window.confirm(`Archive “${item.name}”? It will remain available for historical records.`)) return;
     setError(""); setNotice("");
     const supabase = createSupabaseBrowserClient();
-    const { error } = await supabase.from("stages").delete().eq("id", item.id);
-    if (error) setError(error.message); else { setNotice("Stage deleted."); await load(); }
+    const { error } = await supabase.from("stages").update({ is_active: false }).eq("id", item.id);
+    if (error) setError(error.message); else { setNotice("Stage archived."); await load(); }
   }
 
   const seasonName = (id: string) => {
