@@ -13,6 +13,7 @@ const nav = [
 
 export default function HomePage() {
   const [night, setNight] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
 
   useEffect(() => {
     setNight(localStorage.getItem("zedek-theme") === "night");
@@ -35,12 +36,12 @@ export default function HomePage() {
             {nav.map(([label, href]) => <a key={href} href={href}>{label}</a>)}
           </nav>
           <div className="header-actions">
-            <button className="icon-button" onClick={()=>document.getElementById("zedek-search")?.classList.toggle("open")} aria-label="Search Zedek Sports" title="Search">⌕</button>
+            <button className="icon-button" onClick={()=>setSearchOpen(x=>!x)} aria-label="Search Zedek Sports" title="Search">⌕</button>
             <button className="theme-button" onClick={toggleTheme} aria-label="Toggle day and night mode">{night ? "☀" : "☾"}</button>
           </div>
         </div>
       </header>
-      <div id="zedek-search" className="quick-search"><div className="container quick-search-inner"><span>⌕</span><input placeholder="Search teams, players, competitions or matches…" aria-label="Quick search" onKeyDown={e=>{if(e.key==="Enter"&&e.currentTarget.value.trim())window.location.href="/search?q="+encodeURIComponent(e.currentTarget.value.trim())}}/><a href="/search">Open full search →</a></div></div>
+      <div id="zedek-search" className={searchOpen ? "quick-search open" : "quick-search"}><form className="container quick-search-inner" action="/search" method="get"><span>⌕</span><input name="q" placeholder="Search teams, players, competitions or matches…" aria-label="Quick search" /><button type="submit">Search</button><a href="/search">Open full search →</a></form></div>
 
       <section className="hero-shell">
         <div className="container hero">
