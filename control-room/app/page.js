@@ -20,7 +20,7 @@ export default function ControlRoomPage(){
   const [team,setTeam]=useState({name:"",short_name:"",area:"",home_venue:"",image:null});
   const [player,setPlayer]=useState({team_id:"",full_name:"",shirt_number:"",position:"",image:null});
   const [coach,setCoach]=useState({team_id:"",full_name:"",date_of_birth:"",nationality:"",role:"Head Coach",image:null});
-  const [saving,setSaving]=useState(false),[statsData,setStatsData]=useState({standings:[],scorers:[],recent:[]}), [reportMatch,setReportMatch]=useState(null), [report,setReport]=useState(null), [reports,setReports]=useState([]),[liveMatch,setLiveMatch]=useState(null),[events,setEvents]=useState([]),[matchStats,setMatchStats]=useState(null),[clock,setClock]=useState(0),[eventForm,setEventForm]=useState({type:"goal",team_id:"",player_id:"",minute:"",extra_minute:"",details:""}),[lineupMatch,setLineupMatch]=useState(null),[lineupTeam,setLineupTeam]=useState(""),[lineup,setLineup]=useState(null),[lineupPlayers,setLineupPlayers]=useState([]),[lineupLoading,setLineupLoading]=useState(false);
+  const [saving,setSaving]=useState(false),[statsSeasonId,setStatsSeasonId]=useState(""),[statsData,setStatsData]=useState({standings:[],scorers:[],recent:[]}), [reportMatch,setReportMatch]=useState(null), [report,setReport]=useState(null), [reports,setReports]=useState([]),[liveMatch,setLiveMatch]=useState(null),[events,setEvents]=useState([]),[matchStats,setMatchStats]=useState(null),[clock,setClock]=useState(0),[eventForm,setEventForm]=useState({type:"goal",team_id:"",player_id:"",minute:"",extra_minute:"",details:""}),[lineupMatch,setLineupMatch]=useState(null),[lineupTeam,setLineupTeam]=useState(""),[lineup,setLineup]=useState(null),[lineupPlayers,setLineupPlayers]=useState([]),[lineupLoading,setLineupLoading]=useState(false);
 
   useEffect(()=>{if(!liveMatch)return;const tick=()=>setClock(elapsed(liveMatch));tick();const id=setInterval(tick,1000);return()=>clearInterval(id);},[liveMatch]);
 
@@ -120,11 +120,13 @@ export default function ControlRoomPage(){
   async function addEvent(){ if(!liveMatch)return; const supabase=getSupabase(); setSaving(true); setError(""); const minute=eventForm.minute?Number(eventForm.minute):Math.floor(clock/60); const teamId=eventForm.team_id||null; const playerId=eventForm.player_id||null; if((eventForm.type!=="note"&&eventForm.type!=="var")&&!teamId){setError("Select a team for this event.");setSaving(false);return;} if(playerId){const p=players.find(x=>x.id===playerId);if(!p||p.team_id!==teamId){setError("The selected player does not belong to the selected team.");setSaving(false);return;}} const result=await supabase.from("match_events").insert({match_id:liveMatch.id,team_id:teamId,player_id:playerId,event_type:eventForm.type,minute,extra_minute:eventForm.extra_minute?Number(eventForm.extra_minute):null,details:eventForm.details||null}); if(result.error){setError(result.error.message);setSaving(false);return;} if((eventForm.type==="goal"||eventForm.type==="own_goal")&&teamId){const scoringTeam=eventForm.type==="own_goal"?(teamId===liveMatch.home_team_id?liveMatch.away_team_id:liveMatch.home_team_id):teamId; const home=scoringTeam===liveMatch.home_team_id; const values=home?{home_score:(liveMatch.home_score||0)+1}:{away_score:(liveMatch.away_score||0)+1}; const upd=await supabase.from("matches").update(values).eq("id",liveMatch.id); if(upd.error){setError(upd.error.message);setSaving(false);return;} setLiveMatch({...liveMatch,...values});} setEventForm({type:"goal",team_id:"",player_id:"",minute:"",extra_minute:"",details:""});setSaving(false);await loadLive(liveMatch.id); }
   async function loadStats(){
     const supabase=getSupabase(); if(!supabase)return;
-    const [m,e]=await Promise.all([
-      supabase.from("matches").select("id,scheduled_at,status,home_score,away_score,home_team_id,away_team_id,home:teams!matches_home_team_id_fkey(id,name),away:teams!matches_away_team_id_fkey(id,name)").in("status",["finished","verified"]).order("scheduled_at",{ascending:false}),
-      supabase.from("match_events").select("match_id,team_id,player_id,event_type,players(full_name,shirt_number),teams(name)").in("event_type",["goal","own_goal","yellow_card","red_card"])
-    ]);
-    if(m.error){setError(m.error.message);return;} if(e.error){setError(e.error.message);return;}
+    let matchQuery=supabase.from("matches").select("id,season_id,stage_id,scheduled_at,status,home_score,away_score,home_team_id,away_team_id,home:teams!matches_home_team_id_fkey(id,name),away:teams!matches_away_team_id_fkey(id,name)").in("status",["finished","verified"]).order("scheduled_at",{ascending:false});
+    if(statsSeasonId)matchQuery=matchQuery.eq("season_id",statsSeasonId);
+    const m=await matchQuery;
+    if(m.error){setError(m.error.message);return;}
+    const ids=(m.data||[]).map(x=>x.id);
+    const e=ids.length?await supabase.from("match_events").select("match_id,team_id,player_id,event_type,players(full_name,shirt_number),teams(name)").in("match_id",ids).in("event_type",["goal","own_goal","yellow_card","red_card"]):{data:[],error:null};
+    if(e.error){setError(e.error.message);return;}
     const map={}; const ensure=(id,name)=>{if(!id)return null;if(!map[id])map[id]={team_id:id,team:name||"Unknown",played:0,wins:0,draws:0,losses:0,gf:0,ga:0,gd:0,points:0};return map[id];};
     (m.data||[]).forEach(x=>{const h=ensure(x.home_team_id,x.home?.name),a=ensure(x.away_team_id,x.away?.name);if(!h||!a)return;h.played++;a.played++;h.gf+=x.home_score||0;h.ga+=x.away_score||0;a.gf+=x.away_score||0;a.ga+=x.home_score||0;if((x.home_score||0)>(x.away_score||0)){h.wins++;h.points+=3;a.losses++;}else if((x.home_score||0)<(x.away_score||0)){a.wins++;a.points+=3;h.losses++;}else{h.draws++;a.draws++;h.points++;a.points++;}});
     Object.values(map).forEach(x=>x.gd=x.gf-x.ga);
@@ -228,6 +230,7 @@ export default function ControlRoomPage(){
           <div className="panel">
             <h2>Statistics Hub</h2>
             <p className="muted">Official results from finished and verified matches.</p>
+            <label>Season<select value={statsSeasonId} onChange={e=>{setStatsSeasonId(e.target.value);setStatsData({standings:[],scorers:[],recent:[]});}}><option value="">All seasons</option>{seasons.map(x=><option key={x.id} value={x.id}>{x.name} · {x.competitions?.name||"Competition"}</option>)}</select></label>
             <button className="button primary" onClick={loadStats}>Refresh statistics</button>
             <h3>Standings</h3>
             <div className="table-wrap">
