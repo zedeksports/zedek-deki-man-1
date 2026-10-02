@@ -20,7 +20,7 @@ export default function ControlRoomPage(){
   const [team,setTeam]=useState({name:"",short_name:"",area:"",home_venue:"",image:null});
   const [player,setPlayer]=useState({team_id:"",full_name:"",shirt_number:"",position:"",image:null});
   const [coach,setCoach]=useState({team_id:"",full_name:"",date_of_birth:"",nationality:"",role:"Head Coach",image:null});
-  const [saving,setSaving]=useState(false),[statsSeasonId,setStatsSeasonId]=useState(""),[statsData,setStatsData]=useState({standings:[],scorers:[],recent:[]}), [reportMatch,setReportMatch]=useState(null), [report,setReport]=useState(null), [reports,setReports]=useState([]),[liveMatch,setLiveMatch]=useState(null),[events,setEvents]=useState([]),[matchStats,setMatchStats]=useState(null),[clock,setClock]=useState(0),[eventForm,setEventForm]=useState({type:"goal",team_id:"",player_id:"",minute:"",extra_minute:"",details:""}),[lineupMatch,setLineupMatch]=useState(null),[lineupTeam,setLineupTeam]=useState(""),[lineup,setLineup]=useState(null),[lineupPlayers,setLineupPlayers]=useState([]),[lineupLoading,setLineupLoading]=useState(false);
+  const [saving,setSaving]=useState(false),[statsCompetitionId,setStatsCompetitionId]=useState(""),[statsSeasonId,setStatsSeasonId]=useState(""),[officialStats,setOfficialStats]=useState([]),[statsData,setStatsData]=useState({standings:[],scorers:[],recent:[]}), [reportMatch,setReportMatch]=useState(null), [report,setReport]=useState(null), [reports,setReports]=useState([]),[liveMatch,setLiveMatch]=useState(null),[events,setEvents]=useState([]),[matchStats,setMatchStats]=useState(null),[clock,setClock]=useState(0),[eventForm,setEventForm]=useState({type:"goal",team_id:"",player_id:"",minute:"",extra_minute:"",details:""}),[lineupMatch,setLineupMatch]=useState(null),[lineupTeam,setLineupTeam]=useState(""),[lineup,setLineup]=useState(null),[lineupPlayers,setLineupPlayers]=useState([]),[lineupLoading,setLineupLoading]=useState(false);
 
   useEffect(()=>{if(!liveMatch)return;const tick=()=>setClock(elapsed(liveMatch));tick();const id=setInterval(tick,1000);return()=>clearInterval(id);},[liveMatch]);
 
@@ -120,8 +120,12 @@ export default function ControlRoomPage(){
   async function addEvent(){ if(!liveMatch)return; const supabase=getSupabase(); setSaving(true); setError(""); const minute=eventForm.minute?Number(eventForm.minute):Math.floor(clock/60); const teamId=eventForm.team_id||null; const playerId=eventForm.player_id||null; if((eventForm.type!=="note"&&eventForm.type!=="var")&&!teamId){setError("Select a team for this event.");setSaving(false);return;} if(playerId){const p=players.find(x=>x.id===playerId);if(!p||p.team_id!==teamId){setError("The selected player does not belong to the selected team.");setSaving(false);return;}} const result=await supabase.from("match_events").insert({match_id:liveMatch.id,team_id:teamId,player_id:playerId,event_type:eventForm.type,minute,extra_minute:eventForm.extra_minute?Number(eventForm.extra_minute):null,details:eventForm.details||null}); if(result.error){setError(result.error.message);setSaving(false);return;} if((eventForm.type==="goal"||eventForm.type==="own_goal")&&teamId){const scoringTeam=eventForm.type==="own_goal"?(teamId===liveMatch.home_team_id?liveMatch.away_team_id:liveMatch.home_team_id):teamId; const home=scoringTeam===liveMatch.home_team_id; const values=home?{home_score:(liveMatch.home_score||0)+1}:{away_score:(liveMatch.away_score||0)+1}; const upd=await supabase.from("matches").update(values).eq("id",liveMatch.id); if(upd.error){setError(upd.error.message);setSaving(false);return;} setLiveMatch({...liveMatch,...values});} setEventForm({type:"goal",team_id:"",player_id:"",minute:"",extra_minute:"",details:""});setSaving(false);await loadLive(liveMatch.id); }
   async function loadStats(){
     const supabase=getSupabase(); if(!supabase)return;
+    setError(""); setNotice("");
+    const selectedSeasonIds=statsCompetitionId?seasons.filter(x=>x.competition_id===statsCompetitionId).map(x=>x.id):[];
+    if(statsCompetitionId&&!selectedSeasonIds.length){setStatsData({standings:[],scorers:[],recent:[]});setOfficialStats([]);setNotice("No seasons are registered for this competition yet.");return;}
     let matchQuery=supabase.from("matches").select("id,season_id,stage_id,scheduled_at,status,home_score,away_score,home_team_id,away_team_id,home:teams!matches_home_team_id_fkey(id,name),away:teams!matches_away_team_id_fkey(id,name)").in("status",["finished","verified"]).order("scheduled_at",{ascending:false});
     if(statsSeasonId)matchQuery=matchQuery.eq("season_id",statsSeasonId);
+    else if(statsCompetitionId)matchQuery=matchQuery.in("season_id",selectedSeasonIds);
     const m=await matchQuery;
     if(m.error){setError(m.error.message);return;}
     const ids=(m.data||[]).map(x=>x.id);
@@ -131,6 +135,13 @@ export default function ControlRoomPage(){
     (m.data||[]).forEach(x=>{const h=ensure(x.home_team_id,x.home?.name),a=ensure(x.away_team_id,x.away?.name);if(!h||!a)return;h.played++;a.played++;h.gf+=x.home_score||0;h.ga+=x.away_score||0;a.gf+=x.away_score||0;a.ga+=x.home_score||0;if((x.home_score||0)>(x.away_score||0)){h.wins++;h.points+=3;a.losses++;}else if((x.home_score||0)<(x.away_score||0)){a.wins++;a.points+=3;h.losses++;}else{h.draws++;a.draws++;h.points++;a.points++;}});
     Object.values(map).forEach(x=>x.gd=x.gf-x.ga);
     const scorers={}; (e.data||[]).forEach(x=>{if(x.event_type!=="goal"||!x.player_id)return;const p=x.players;if(!scorers[x.player_id])scorers[x.player_id]={player_id:x.player_id,player:p?.full_name||"Unknown",shirt_number:p?.shirt_number||"",team:x.teams?.name||"Unknown",goals:0};scorers[x.player_id].goals++;});
+    const statQuery=supabase.from("official_player_statistics").select("*, players(full_name,shirt_number), teams(name)").order("goals",{ascending:false}).order("minutes_played",{ascending:false});
+    let oq=statQuery;
+    if(statsSeasonId) oq=oq.eq("season_id",statsSeasonId);
+    else if(statsCompetitionId) oq=oq.in("season_id",selectedSeasonIds);
+    const os=await oq;
+    if(os.error){setError(os.error.message);return;}
+    setOfficialStats(os.data||[]);
     setStatsData({standings:Object.values(map).sort((a,b)=>b.points-a.points||b.gd-a.gd||b.gf-a.gf||a.team.localeCompare(b.team)),scorers:Object.values(scorers).sort((a,b)=>b.goals-a.goals||a.player.localeCompare(b.player)),recent:(m.data||[]).slice(0,10)});
   }
   async function loadReports(){
@@ -230,8 +241,8 @@ export default function ControlRoomPage(){
           <div className="panel">
             <h2>Statistics Hub</h2>
             <p className="muted">Official results from finished and verified matches.</p>
-            <label>Season<select value={statsSeasonId} onChange={e=>{setStatsSeasonId(e.target.value);setStatsData({standings:[],scorers:[],recent:[]});}}><option value="">All seasons</option>{seasons.map(x=><option key={x.id} value={x.id}>{x.name} · {x.competitions?.name||"Competition"}</option>)}</select></label>
-            <button className="button primary" onClick={loadStats}>Refresh statistics</button>
+            <label>Competition<select value={statsCompetitionId} onChange={e=>{setStatsCompetitionId(e.target.value);setStatsSeasonId("");setStatsData({standings:[],scorers:[],recent:[]});setOfficialStats([]);}}><option value="">All competitions</option>{competitions.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label><label>Season<select value={statsSeasonId} onChange={e=>{setStatsSeasonId(e.target.value);setStatsData({standings:[],scorers:[],recent:[]});setOfficialStats([]);}}><option value="">All seasons</option>{seasons.filter(x=>!statsCompetitionId||x.competition_id===statsCompetitionId).map(x=><option key={x.id} value={x.id}>{x.name} · {x.competitions?.name||"Competition"}</option>)}</select></label>
+            <button className="button primary" onClick={loadStats}>Refresh statistics</button><div className="panel" style={{marginTop:16}}><h2>Official Player Statistics</h2><p className="muted">Verified-match statistics generated from official lineups and events.</p>{officialStats.length?<div className="form-stack">{officialStats.slice(0,50).map(x=><div className="status-card" key={x.id}><b>{x.players?.full_name||"Unknown player"} {x.players?.shirt_number?"· #"+x.players.shirt_number:""}</b><span>{x.teams?.name||"Team"} · Apps {x.matches_played} · Starts {x.starts} · Goals {x.goals} · Assists {x.assists} · YC {x.yellow_cards} · RC {x.red_cards} · Minutes {x.minutes_played}</span></div>)}</div>:<p className="muted">No official player statistics for the selected scope yet.</p>}</div>
             <h3>Standings</h3>
             <div className="table-wrap">
               <table>
