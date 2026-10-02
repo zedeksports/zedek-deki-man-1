@@ -13,7 +13,7 @@ type Match = {
   home_team_id: string; away_team_id: string; home_score: number; away_score: number;
   status: string; scheduled_at: string | null;
 };
-type Event = { match_id: string; team_id: string; player_id: string | null; event_type: string; minute: number };
+type Event = { match_id: string; team_id: string | null; player_id: string | null; event_type: string; minute: number | null };
 type Player = { id: string; full_name: string; team_id: string };
 type MatchStat = {
   match_id: string;
