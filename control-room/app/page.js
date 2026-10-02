@@ -170,11 +170,46 @@ export default function ControlRoomPage(){
         {TABS.map(item=><button key={item} className={"button "+(tab===item?"primary":"")} onClick={()=>setTab(item)}>{item.replace("_"," ").replace(/^./,x=>x.toUpperCase())}</button>)}
       </div>
 
-      {tab==="stats"&&<div className="stats-grid">
-        <div className="panel"><h2>Statistics Hub</h2><p className="muted">Official results from finished and verified matches.</p><button className="button primary" onClick={loadStats}>Refresh statistics</button>
-          <h3>Standings</h3><div className="table-wrap"><table><thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr></thead><tbody>{statsData.standings.map((x,i)=><tr key={x.team_id}><td>{i+1}</td><td>{x.team}</td><td>{x.played}</td><td>{x.wins}</td><td>{x.draws}</td><td>{x.losses}</td><td>{x.gf}</td><td>{x.ga}</td><td>{x.gd}</td><td><b>{x.points}</b></td></tr>)}</tbody></table></div>{!statsData.standings.length&&<p className="muted">No finished or verified matches yet.</p>}</div>
-        <div className="panel"><h2>Top Scorers</h2>{statsData.scorers.map((x,i)=><div className="status-card" key={x.player_id}><b>{i+1}. {x.player}</b><span>{x.team} · {x.goals} goal{x.goals===1?"":"s"}</span></div>)}{!statsData.scorers.length&&<p className="muted">No recorded goals yet.</p>}<h2 style={{marginTop:20}}>Recent Results</h2>{statsData.recent.map(x=><div className="status-card" key={x.id}><b>{x.home?.name} {x.home_score??0} — {x.away_score??0} {x.away?.name}</b><span>{fmtDate(x.scheduled_at)} · {x.status}</span></div>)}</div>
-      </div>
+      {tab==="stats" && (
+        <div className="stats-grid">
+          <div className="panel">
+            <h2>Statistics Hub</h2>
+            <p className="muted">Official results from finished and verified matches.</p>
+            <button className="button primary" onClick={loadStats}>Refresh statistics</button>
+            <h3>Standings</h3>
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr></thead>
+                <tbody>
+                  {statsData.standings.map((x,i) => (
+                    <tr key={x.team_id}>
+                      <td>{i+1}</td><td>{x.team}</td><td>{x.played}</td><td>{x.wins}</td><td>{x.draws}</td><td>{x.losses}</td><td>{x.gf}</td><td>{x.ga}</td><td>{x.gd}</td><td><b>{x.points}</b></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {!statsData.standings.length && <p className="muted">No finished or verified matches yet.</p>}
+          </div>
+          <div className="panel">
+            <h2>Top Scorers</h2>
+            {statsData.scorers.map((x,i) => (
+              <div className="status-card" key={x.player_id}>
+                <b>{i+1}. {x.player}</b>
+                <span>{x.team} · {x.goals} goal{x.goals===1 ? "" : "s"}</span>
+              </div>
+            ))}
+            {!statsData.scorers.length && <p className="muted">No recorded goals yet.</p>}
+            <h2 style={{marginTop:20}}>Recent Results</h2>
+            {statsData.recent.map(x => (
+              <div className="status-card" key={x.id}>
+                <b>{x.home?.name} {x.home_score ?? 0} — {x.away_score ?? 0} {x.away?.name}</b>
+                <span>{fmtDate(x.scheduled_at)} · {x.status}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       {tab==="overview"&&<div className="grid">
         <div className="card"><h2>{competitions.length}</h2><p>Competitions</p></div><div className="card"><h2>{seasons.length}</h2><p>Seasons</p></div>
         <div className="card"><h2>{stages.length}</h2><p>Stages</p></div><div className="card"><h2>{matches.length}</h2><p>Fixtures</p></div>
