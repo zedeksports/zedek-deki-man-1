@@ -122,7 +122,7 @@ export default function SeasonsPage() {
               <div className="button-row">
                 <button className="button" onClick={() => editSeason(item)}>Edit</button>
                 <button className="button" onClick={() => toggleActive(item)}>{item.is_active ? "Deactivate" : "Activate"}</button>
-                <button className="button danger" onClick={() => remove(item)}>Delete</button>
+                <button className="button danger" onClick={() => remove(item)} disabled={!item.is_active}>{item.is_active ? "Archive" : "Archived"}</button>
               </div>
             </article>
           ))}</div>
