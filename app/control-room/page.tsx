@@ -1,13 +1,15 @@
+import ControlRoomDashboard from "./control-room-dashboard";
+
 const modules = [
-  ["Competitions", "Manage competitions, formats and seasons."],
-  ["Teams & Players", "Manage clubs, squads and player records."],
-  ["Coaches", "Manage coaches, assignments and history."],
-  ["Fixtures", "Create, reschedule and verify fixtures."],
-  ["Match Control", "Operate live matches, score and events."],
-  ["Lineups", "Starting XI, substitutes, captain and formation."],
-  ["Reports & Verification", "Reports, corrections and official results."],
-  ["Statistics Hub", "Official team, player and competition intelligence."],
-  ["Newsroom", "Create, review, publish and archive stories."]
+  ["Competitions", "Manage competitions, formats and seasons.", "/control-room/competitions"],
+  ["Teams & Players", "Manage clubs, squads and player records.", "/control-room/teams"],
+  ["Coaches", "Manage coaches, assignments and history.", "/control-room/coaches"],
+  ["Fixtures", "Create, reschedule and verify fixtures.", "/control-room/matches"],
+  ["Match Control", "Operate live matches, score and events.", "/control-room/match-control"],
+  ["Lineups", "Starting XI, substitutes, captain and formation.", "/control-room/lineups"],
+  ["Reports & Verification", "Reports, corrections and official results.", "/control-room/reports"],
+  ["Statistics Hub", "Official team, player and competition intelligence.", "/control-room/statistics"],
+  ["Newsroom", "Create, review, publish and archive stories.", "/control-room/newsroom"]
 ];
 
 export default function ControlRoomPage() {
@@ -28,12 +30,16 @@ export default function ControlRoomPage() {
         <p>The operational foundation for running local football accurately.</p>
       </section>
 
+      <section className="container section">
+        <ControlRoomDashboard />
+      </section>
+
       <section className="container module-grid">
-        {modules.map(([title, description]) => (
-          <article className="module" key={title}>
+        {modules.map(([title, description, href]) => (
+          <a className="module" href={href} key={title}>
             <strong>{title}</strong>
             <small>{description}</small>
-          </article>
+          </a>
         ))}
       </section>
     </main>
