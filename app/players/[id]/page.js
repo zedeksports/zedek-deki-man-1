@@ -13,9 +13,9 @@ export default function PlayerDetail(){
   useEffect(()=>{if(!id)return;async function load(){
     const s=createSupabaseBrowserClient();
     const [p,st,m,v]=await Promise.all([
-      s.from("players").select("id,full_name,shirt_number,position,is_captain,photo_url,date_of_birth,nationality,team:teams!players_team_id_fkey(id,name,short_name,area,logo_url)").eq("id",id).eq("is_active",true).maybeSingle(),
+      s.from("players").select("id,team_id,full_name,shirt_number,position,is_captain,photo_url,date_of_birth,nationality,team:teams!players_team_id_fkey(id,name,short_name,area,logo_url)").eq("id",id).eq("is_active",true).maybeSingle(),
       s.from("official_player_statistics").select("id,season_id,team_id,matches_played,starts,goals,assists,yellow_cards,red_cards,minutes_played,season:seasons(id,name,competition:competitions(id,name)),team:teams(id,name,short_name,logo_url)").eq("player_id",id).order("updated_at",{ascending:false}),
-      s.from("matches").select("id,scheduled_at,status,home_score,away_score,home_team_id,away_team_id,home_team:teams!matches_home_team_id_fkey(id,name,short_name,logo_url),away_team:teams!matches_away_team_id_fkey(id,name,short_name,logo_url),season:seasons(id,name,competition:competitions(id,name)),lineups(id,team_id,lineup_players(player_id,starter,shirt_number,position))").or("home_team_id.eq."+((id||""))+",away_team_id.eq."+((id||""))).order("scheduled_at",{ascending:false}).limit(1),
+      s.from("matches").select("id,scheduled_at,status,home_score,away_score,home_team_id,away_team_id,home_team:teams!matches_home_team_id_fkey(id,name,short_name,logo_url),away_team:teams!matches_away_team_id_fkey(id,name,short_name,logo_url),season:seasons(id,name,competition:competitions(id,name)),lineups(id,team_id,lineup_players(player_id,starter,shirt_number,position))").or("home_team_id.eq."+((p.data?.team_id)||"00000000-0000-0000-0000-000000000000")+",away_team_id.eq."+((p.data?.team_id)||"00000000-0000-0000-0000-000000000000")).order("scheduled_at",{ascending:false}).limit(10),
       s.from("match_verifications").select("match_id").eq("official_result",true)
     ]);
     const e=p.error||st.error||m.error||v.error;
