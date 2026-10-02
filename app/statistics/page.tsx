@@ -21,6 +21,7 @@ export default function StatisticsPage() {
   const [players, setPlayers] = useState<Player[]>([]);
   const [registeredTeamIds, setRegisteredTeamIds] = useState<string[]>([]);
   const [seasonId, setSeasonId] = useState("");
+  const [teamId, setTeamId] = useState("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -73,6 +74,7 @@ export default function StatisticsPage() {
   const playerMap = useMemo(() => new Map(players.map(p => [p.id, p])), [players]);
   const competitionMap = useMemo(() => new Map(competitions.map(c => [c.id, c.name])), [competitions]);
   const season = seasons.find(s => s.id === seasonId);
+  const seasonTeams = useMemo(() => teams.filter(t => registeredTeamIds.includes(t.id)), [teams, registeredTeamIds]);
 
   const standings = useMemo(() => {
     const rows = new Map<string, { teamId: string; played: number; wins: number; draws: number; losses: number; gf: number; ga: number; points: number }>();
@@ -87,6 +89,28 @@ export default function StatisticsPage() {
     });
     return [...rows.values()].sort((a,b) => b.points-a.points || (b.gf-b.ga)-(a.gf-a.ga) || b.gf-a.gf || (teamMap.get(a.teamId)||"").localeCompare(teamMap.get(b.teamId)||""));
   }, [matches, teamMap, registeredTeamIds]);
+
+  const teamForm = useMemo(() => {
+    if (!teamId) return [];
+    return matches
+      .filter(m => m.home_team_id === teamId || m.away_team_id === teamId)
+      .sort((a, b) => a.id.localeCompare(b.id))
+      .slice(-5)
+      .reverse()
+      .map(m => {
+        const home = m.home_team_id === teamId;
+        const gf = home ? m.home_score : m.away_score;
+        const ga = home ? m.away_score : m.home_score;
+        return { ...m, opponent: teamMap.get(home ? m.away_team_id : m.home_team_id) || "Unknown team", result: gf > ga ? "W" : gf < ga ? "L" : "D", score: home ? `${m.home_score}-${m.away_score}` : `${m.away_score}-${m.home_score}` };
+      });
+  }, [matches, teamId, teamMap]);
+
+  const teamSummary = useMemo(() => {
+    if (!teamId) return null;
+    const row = standings.find(x => x.teamId === teamId);
+    if (!row) return { played: 0, gf: 0, ga: 0, points: 0, gd: 0 };
+    return { played: row.played, gf: row.gf, ga: row.ga, points: row.points, gd: row.gf - row.ga };
+  }, [standings, teamId]);
 
   const scorers = useMemo(() => {
     const counts = new Map<string, number>();
@@ -110,7 +134,7 @@ export default function StatisticsPage() {
         <p>Official standings and player statistics are calculated from finished and verified match records only.</p>
         <div className="stats-toolbar">
           <label>Season<select value={seasonId} onChange={e => void changeSeason(e.target.value)} disabled={!seasons.length}><option value="">Select season</option>{seasons.map(s => <option key={s.id} value={s.id}>{s.name} · {s.year} · {competitionMap.get(s.competition_id) || "Competition"}</option>)}</select></label>
-          {season && <span className="stats-source">Official data · {season.name}</span>}
+          {season && <span className="stats-source">Official data · {season.name}</span>\n          {seasonTeams.length > 0 && <label>Team<select value={teamId} onChange={e => setTeamId(e.target.value)}><option value="">Select team</option>{seasonTeams.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select></label>}}
         </div>
       </section>
       <section className="container section">
