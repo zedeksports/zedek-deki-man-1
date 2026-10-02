@@ -17,8 +17,8 @@ export default function ControlRoomPage(){
   const [season,setSeason]=useState({competition_id:"",name:"",year:"",start_date:"",end_date:""});
   const [stage,setStage]=useState({season_id:"",name:"",stage_type:"league",stage_order:"1",is_active:true});
   const [fixture,setFixture]=useState({season_id:"",stage_id:"",home_team_id:"",away_team_id:"",scheduled_at:"",venue:"",round_name:"",leg:"1",notes:""});
-  const [team,setTeam]=useState({name:"",short_name:"",area:"",home_venue:""});
-  const [player,setPlayer]=useState({team_id:"",full_name:"",shirt_number:"",position:""});
+  const [team,setTeam]=useState({name:"",short_name:"",area:"",home_venue:"",image:null});
+  const [player,setPlayer]=useState({team_id:"",full_name:"",shirt_number:"",position:"",image:null});
   const [saving,setSaving]=useState(false),[statsData,setStatsData]=useState({standings:[],scorers:[],recent:[]}), [reportMatch,setReportMatch]=useState(null), [report,setReport]=useState(null), [reports,setReports]=useState([]),[liveMatch,setLiveMatch]=useState(null),[events,setEvents]=useState([]),[matchStats,setMatchStats]=useState(null),[clock,setClock]=useState(0),[eventForm,setEventForm]=useState({type:"goal",team_id:"",player_id:"",minute:"",extra_minute:"",details:""}),[lineupMatch,setLineupMatch]=useState(null),[lineupTeam,setLineupTeam]=useState(""),[lineup,setLineup]=useState(null),[lineupPlayers,setLineupPlayers]=useState([]),[lineupLoading,setLineupLoading]=useState(false);
 
   useEffect(()=>{if(!liveMatch)return;const tick=()=>setClock(elapsed(liveMatch));tick();const id=setInterval(tick,1000);return()=>clearInterval(id);},[liveMatch]);
@@ -53,6 +53,33 @@ export default function ControlRoomPage(){
     boot(); return()=>{mounted=false};
 },[]);
 
+  async function uploadAsset(file,folder,id){
+    if(!file)return null;
+    const supabase=getSupabase();
+    const ext=(file.name.split(".").pop()||"jpg").toLowerCase().replace(/[^a-z0-9]/g,"");
+    const path=folder+"/"+id+"."+ext;
+    const upload=await supabase.storage.from("sports-assets").upload(path,file,{upsert:true,contentType:file.type||"image/jpeg",cacheControl:"3600"});
+    if(upload.error)throw upload.error;
+    return supabase.storage.from("sports-assets").getPublicUrl(path).data.publicUrl;
+  }
+  async function saveTeam(e){
+    e.preventDefault();setSaving(true);setError("");setNotice("");
+    const supabase=getSupabase();
+    const inserted=await supabase.from("teams").insert({name:team.name.trim(),short_name:team.short_name.trim()||null,area:team.area.trim()||null,home_venue:team.home_venue.trim()||null}).select("*").single();
+    if(inserted.error){setSaving(false);setError(inserted.error.message);return;}
+    try{const logo_url=await uploadAsset(team.image,"teams",inserted.data.id);if(logo_url){const updated=await supabase.from("teams").update({logo_url}).eq("id",inserted.data.id);if(updated.error)throw updated.error;}}
+    catch(err){setSaving(false);setError("Team saved, but logo upload failed: "+err.message);await refresh();return;}
+    setSaving(false);setTeam({name:"",short_name:"",area:"",home_venue:"",image:null});setNotice("Team registered successfully.");await refresh();
+  }
+  async function savePlayer(e){
+    e.preventDefault();setSaving(true);setError("");setNotice("");
+    const supabase=getSupabase();
+    const inserted=await supabase.from("players").insert({team_id:player.team_id,full_name:player.full_name.trim(),shirt_number:player.shirt_number?Number(player.shirt_number):null,position:player.position.trim()||null}).select("*").single();
+    if(inserted.error){setSaving(false);setError(inserted.error.message);return;}
+    try{const photo_url=await uploadAsset(player.image,"players",inserted.data.id);if(photo_url){const updated=await supabase.from("players").update({photo_url}).eq("id",inserted.data.id);if(updated.error)throw updated.error;}}
+    catch(err){setSaving(false);setError("Player saved, but photo upload failed: "+err.message);await refresh();return;}
+    setSaving(false);setPlayer({team_id:"",full_name:"",shirt_number:"",position:"",image:null});setNotice("Player registered successfully.");await refresh();
+  }
   async function save(table,values,reset){
     setSaving(true);setError("");setNotice("");const supabase=getSupabase();
     if(!supabase){setSaving(false);return;}
@@ -317,17 +344,17 @@ export default function ControlRoomPage(){
   </div>
 </div>}
 {tab==="teams"&&<div className="stats-grid">
-        <form className="panel form-stack" onSubmit={e=>{e.preventDefault();save("teams",{name:team.name.trim(),short_name:team.short_name.trim()||null,area:team.area.trim()||null,home_venue:team.home_venue.trim()||null},()=>setTeam({name:"",short_name:"",area:"",home_venue:""}));}}>
-          <h2>Team registry</h2><label>Team name<input required value={team.name} onChange={e=>setTeam({...team,name:e.target.value})}/></label><label>Short name<input value={team.short_name} onChange={e=>setTeam({...team,short_name:e.target.value})}/></label><label>Area<input value={team.area} onChange={e=>setTeam({...team,area:e.target.value})}/></label><label>Home venue<input value={team.home_venue} onChange={e=>setTeam({...team,home_venue:e.target.value})}/></label><button className="button primary" disabled={saving}>Register team</button>
+        <form className="panel form-stack" onSubmit={saveTeam}>
+          <h2>Team registry</h2><label>Team name<input required value={team.name} onChange={e=>setTeam({...team,name:e.target.value})}/></label><label>Short name<input value={team.short_name} onChange={e=>setTeam({...team,short_name:e.target.value})}/></label><label>Area<input value={team.area} onChange={e=>setTeam({...team,area:e.target.value})}/></label><label>Home venue<input value={team.home_venue} onChange={e=>setTeam({...team,home_venue:e.target.value})}/></label><label>Team logo<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={e=>setTeam({...team,image:e.target.files?.[0]||null})}/></label>{team.image&&<span className="muted">Selected: {team.image.name}</span>}<button className="button primary" disabled={saving}>{saving?"Saving…":"Register team"}</button>
         </form>
-        <div className="panel"><h2>Registered teams</h2>{teams.map(x=><div className="status-card" key={x.id}><b>{x.name}</b><span>{x.short_name||"—"} · {x.area||"Oti"} · {x.home_venue||"Venue not set"}</span></div>)}{!teams.length&&<p className="muted">No teams yet.</p>}</div>
+        <div className="panel"><h2>Registered teams</h2>{teams.map(x=><div className="status-card" key={x.id} style={{display:"flex",alignItems:"center",gap:12}}>{x.logo_url?<img src={x.logo_url} alt="" style={{width:48,height:48,borderRadius:"50%",objectFit:"cover"}}/>:<div style={{width:48,height:48,borderRadius:"50%",border:"1px solid #ddd",display:"grid",placeItems:"center"}}>⚽</div>}<div><b>{x.name}</b><span>{x.short_name||"—"} · {x.area||"Oti"} · {x.home_venue||"Venue not set"}</span></div></div>)}{!teams.length&&<p className="muted">No teams yet.</p>}</div>
       </div>}
 
       {tab==="players"&&<div className="stats-grid">
-        <form className="panel form-stack" onSubmit={e=>{e.preventDefault();save("players",{team_id:player.team_id,full_name:player.full_name.trim(),shirt_number:player.shirt_number?Number(player.shirt_number):null,position:player.position.trim()||null},()=>setPlayer({team_id:"",full_name:"",shirt_number:"",position:""}));}}>
-          <h2>Player registry</h2><label>Team<select required value={player.team_id} onChange={e=>setPlayer({...player,team_id:e.target.value})}><option value="">Select team</option>{teams.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label><label>Full name<input required value={player.full_name} onChange={e=>setPlayer({...player,full_name:e.target.value})}/></label><label>Shirt number<input type="number" value={player.shirt_number} onChange={e=>setPlayer({...player,shirt_number:e.target.value})}/></label><label>Position<input value={player.position} onChange={e=>setPlayer({...player,position:e.target.value})}/></label><button className="button primary" disabled={saving}>Register player</button>
+        <form className="panel form-stack" onSubmit={savePlayer}>
+          <h2>Player registry</h2><label>Team<select required value={player.team_id} onChange={e=>setPlayer({...player,team_id:e.target.value})}><option value="">Select team</option>{teams.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label><label>Full name<input required value={player.full_name} onChange={e=>setPlayer({...player,full_name:e.target.value})}/></label><label>Shirt number<input type="number" value={player.shirt_number} onChange={e=>setPlayer({...player,shirt_number:e.target.value})}/></label><label>Position<input value={player.position} onChange={e=>setPlayer({...player,position:e.target.value})}/></label><label>Player photo<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={e=>setPlayer({...player,image:e.target.files?.[0]||null})}/></label>{player.image&&<span className="muted">Selected: {player.image.name}</span>}<button className="button primary" disabled={saving}>{saving?"Saving…":"Register player"}</button>
         </form>
-        <div className="panel"><h2>Registered players</h2>{players.map(x=><div className="status-card" key={x.id}><b>{x.full_name}</b><span>{x.teams?.name||"Team"} · #{x.shirt_number||"—"} · {x.position||"Position not set"}</span></div>)}{!players.length&&<p className="muted">No players yet.</p>}</div>
+        <div className="panel"><h2>Registered players</h2>{players.map(x=><div className="status-card" key={x.id} style={{display:"flex",alignItems:"center",gap:12}}>{x.photo_url?<img src={x.photo_url} alt="" style={{width:48,height:48,borderRadius:"50%",objectFit:"cover"}}/>:<div style={{width:48,height:48,borderRadius:"50%",border:"1px solid #ddd",display:"grid",placeItems:"center"}}>👤</div>}<div><b>{x.full_name}</b><span>{x.teams?.name||"Team"} · #{x.shirt_number||"—"} · {x.position||"Position not set"}</span></div></div>)}{!players.length&&<p className="muted">No players yet.</p>}</div>
       </div>}
     </section>
   </main>;
