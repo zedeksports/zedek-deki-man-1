@@ -5,10 +5,11 @@ const modules = [
   ["Competitions", "Manage competitions, formats and seasons.", "/control-room/competitions"],
   ["Teams & Players", "Manage clubs, squads and player records.", "/control-room/teams"],
   ["Coaches", "Manage coaches, assignments and history.", "/control-room/coaches"],
-  ["Fixtures", "Create, reschedule and verify fixtures.", "/control-room/matches"],
+  ["Fixtures", "Create, reschedule and verify fixtures.", "/control-room/fixtures"],
   ["Match Control", "Operate live matches, score and events.", "/control-room/match-control"],
   ["Lineups", "Starting XI, substitutes, captain and formation.", "/control-room/lineups"],
   ["Reports & Verification", "Reports, corrections and official results.", "/control-room/reports"],
+  ["Standings", "Automatic tables from official completed results.", "/control-room/standings"],
   ["Statistics Hub", "Official team, player and competition intelligence.", "/control-room/statistics"],
   ["Newsroom", "Create, review, publish and archive stories.", "/control-room/newsroom"]
 ];
