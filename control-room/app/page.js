@@ -13,7 +13,7 @@ export default function ControlRoomPage(){
   const [loading,setLoading]=useState(true),[user,setUser]=useState(null),[profile,setProfile]=useState(null);
   const [tab,setTab]=useState("overview"),[error,setError]=useState(""),[notice,setNotice]=useState("");
   const [competitions,setCompetitions]=useState([]),[seasons,setSeasons]=useState([]),[teams,setTeams]=useState([]),[players,setPlayers]=useState([]),[coaches,setCoaches]=useState([]),[stages,setStages]=useState([]),[matches,setMatches]=useState([]);
-  const [competition,setCompetition]=useState({name:"",code:"",location:"",format:"league"});
+  const [competition,setCompetition]=useState({id:"",name:"",code:"",location:"",format:"league",image:null}); const [editingCompetitionId,setEditingCompetitionId]=useState("");
   const [season,setSeason]=useState({competition_id:"",name:"",year:"",start_date:"",end_date:""});
   const [stage,setStage]=useState({season_id:"",name:"",stage_type:"league",stage_order:"1",is_active:true});
   const [fixture,setFixture]=useState({season_id:"",stage_id:"",home_team_id:"",away_team_id:"",scheduled_at:"",venue:"",round_name:"",leg:"1",notes:""});
@@ -99,6 +99,29 @@ export default function ControlRoomPage(){
     }catch(err){setSaving(false);setError("Coach saved, but photo/team assignment failed: "+err.message);await refresh();return;}
     setSaving(false);setCoach({team_id:"",full_name:"",date_of_birth:"",nationality:"",role:"Head Coach",image:null});setNotice("Coach registered successfully.");await refresh();
   }
+
+  async function saveCompetition(e){
+    e.preventDefault();setSaving(true);setError("");setNotice("");const supabase=getSupabase();
+    const values={name:competition.name.trim(),code:competition.code.trim()||null,location:competition.location.trim()||null,format:competition.format};
+    const result=editingCompetitionId?await supabase.from("competitions").update(values).eq("id",editingCompetitionId).select("*").single():await supabase.from("competitions").insert(values).select("*").single();
+    if(result.error){setSaving(false);setError(result.error.message);return;}
+    try{
+      const logo_url=await uploadAsset(competition.image,"competitions",result.data.id);
+      if(logo_url){const updated=await supabase.from("competitions").update({logo_url}).eq("id",result.data.id);if(updated.error)throw updated.error;}
+    }catch(err){setSaving(false);setError((editingCompetitionId?"Competition updated":"Competition saved")+", but logo upload failed: "+err.message);await refresh();return;}
+    const wasEditing=!!editingCompetitionId;
+    setSaving(false);setEditingCompetitionId("");setCompetition({id:"",name:"",code:"",location:"",format:"league",image:null});
+    setNotice(wasEditing?"Competition updated successfully.":"Competition registered successfully.");await refresh();
+  }
+  function editCompetition(x){setEditingCompetitionId(x.id);setCompetition({id:x.id,name:x.name||"",code:x.code||"",location:x.location||"",format:x.format||"league",image:null});setTab("competitions");window.scrollTo({top:0,behavior:"smooth"});}
+  async function deleteCompetition(x){
+    if(!window.confirm("Delete "+x.name+"? This cannot be undone."))return;
+    setSaving(true);setError("");setNotice("");const supabase=getSupabase();
+    const result=await supabase.from("competitions").delete().eq("id",x.id);
+    if(result.error){setSaving(false);setError("Competition could not be deleted: "+result.error.message);return;}
+    setSaving(false);setNotice("Competition deleted successfully.");await refresh();
+  }
+
   async function savePlayer(e){
     e.preventDefault();setSaving(true);setError("");setNotice("");const supabase=getSupabase();
     const values={team_id:player.team_id,full_name:player.full_name.trim(),shirt_number:player.shirt_number?Number(player.shirt_number):null,position:player.position.trim()||null};
@@ -346,16 +369,27 @@ export default function ControlRoomPage(){
         <div className="card"><h2>Phase 2</h2><p>Stages and fixture scheduling are now connected to the live Supabase football database.</p></div>
       </div>}
 
-      {tab==="competitions"&&<div className="stats-grid">
-        <form className="panel form-stack" onSubmit={e=>{e.preventDefault();save("competitions",{name:competition.name.trim(),code:competition.code.trim()||null,location:competition.location.trim()||null,format:competition.format},()=>setCompetition({name:"",code:"",location:"",format:"league"}));}}>
-          <h2>Competition registry</h2><label>Name<input required value={competition.name} onChange={e=>setCompetition({...competition,name:e.target.value})}/></label>
-          <label>Code<input value={competition.code} onChange={e=>setCompetition({...competition,code:e.target.value})}/></label><label>Location<input value={competition.location} onChange={e=>setCompetition({...competition,location:e.target.value})}/></label>
-          <label>Format<select value={competition.format} onChange={e=>setCompetition({...competition,format:e.target.value})}><option value="league">League</option><option value="group">Group</option><option value="h2h">H2H</option><option value="knockout">Knockout</option><option value="two_leg">Two-leg</option></select></label>
-          <button className="button primary" disabled={saving}>Create competition</button>
-        </form>
-        <div className="panel"><h2>Registered</h2>{competitions.map(x=><div className="status-card" key={x.id}><b>{x.name}</b><span>{x.code||"No code"} · {x.location||"No location"} · {x.format}</span></div>)}{!competitions.length&&<p className="muted">No competitions yet.</p>}</div>
-      </div>}
 
+      {tab==="competitions"&&<div className="stats-grid">
+        <form className="panel form-stack" onSubmit={saveCompetition}>
+          <h2>{editingCompetitionId?"Edit competition":"Competition registry"}</h2>
+          <label>Name<input required value={competition.name} onChange={e=>setCompetition({...competition,name:e.target.value})}/></label>
+          <label>Code<input value={competition.code} onChange={e=>setCompetition({...competition,code:e.target.value})}/></label>
+          <label>Location<input value={competition.location} onChange={e=>setCompetition({...competition,location:e.target.value})}/></label>
+          <label>Format<select value={competition.format} onChange={e=>setCompetition({...competition,format:e.target.value})}><option value="league">League</option><option value="group">Group</option><option value="h2h">H2H</option><option value="knockout">Knockout</option><option value="two_leg">Two-leg</option></select></label>
+          <label>Competition logo<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={e=>setCompetition({...competition,image:e.target.files?.[0]||null})}/></label>
+          {competition.image&&<span className="muted">Selected: {competition.image.name}</span>}
+          {editingCompetitionId&&<button type="button" className="button" disabled={saving} onClick={()=>{setEditingCompetitionId("");setCompetition({id:"",name:"",code:"",location:"",format:"league",image:null});}}>Cancel edit</button>}
+          <button className="button primary" disabled={saving}>{saving?"Saving…":editingCompetitionId?"Save competition changes":"Create competition"}</button>
+        </form>
+        <div className="panel"><h2>Registered</h2>
+          {competitions.map(x=><div className="status-card competition-admin-row" key={x.id}>
+            <div className="competition-admin-main">{x.logo_url?<img src={x.logo_url} alt="" className="competition-admin-logo"/>:<div className="competition-admin-logo placeholder">C</div>}<div><b>{x.name}</b><span>{x.code||"No code"} · {x.location||"No location"} · {x.format}</span></div></div>
+            <div className="row-actions"><button type="button" className="button" onClick={()=>editCompetition(x)}>Edit</button><button type="button" className="button danger" onClick={()=>deleteCompetition(x)}>Delete</button></div>
+          </div>)}
+          {!competitions.length&&<p className="muted">No competitions yet.</p>}
+        </div>
+      </div>
       {tab==="seasons"&&<div className="stats-grid">
         <form className="panel form-stack" onSubmit={e=>{e.preventDefault();save("seasons",{competition_id:season.competition_id,name:season.name.trim(),year:season.year?Number(season.year):null,start_date:season.start_date||null,end_date:season.end_date||null},()=>setSeason({competition_id:"",name:"",year:"",start_date:"",end_date:""}));}}>
           <h2>Season registry</h2><label>Competition<select required value={season.competition_id} onChange={e=>setSeason({...season,competition_id:e.target.value})}><option value="">Select competition</option>{competitions.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
