@@ -25,7 +25,7 @@ export default function HomePage() {
         <div className="eyebrow">Local football • Ghana / Oti</div>
         <h1>The home of local football.</h1>
         <p>
-          ZEDEK SPORTS SCORE is being built around the football people actually
+          ZEDEK SPORTS SCORE is being rebuilt around the football people actually
           follow: local teams, competitions, fixtures, live matches, players,
           statistics and stories.
         </p>
