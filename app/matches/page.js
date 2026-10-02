@@ -23,6 +23,7 @@ export default function MatchesPage() {
   const [official, setOfficial] = useState(new Set());
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().slice(0,10));
   const [error, setError] = useState("");
 
   useEffect(() => {
@@ -43,9 +44,13 @@ export default function MatchesPage() {
     load();
   }, []);
 
+  const days = useMemo(() => { const out=[]; for(let i=0;i<8;i++){ const d=new Date(); d.setDate(d.getDate()+i); out.push({key:d.toISOString().slice(0,10), label:i===0?"Today":i===1?"Tomorrow":new Intl.DateTimeFormat("en-GH",{weekday:"short"}).format(d), date:new Intl.DateTimeFormat("en-GH",{day:"numeric",month:"short"}).format(d)}); } return out; }, []);
+
   const visible = useMemo(() => {
     const now = Date.now();
     return matches.filter(m => {
+      const matchDate = new Date(m.scheduled_at).toISOString().slice(0,10);
+      if (matchDate !== selectedDate) return false;
       const isOfficial = official.has(m.id);
       const isUpcoming = new Date(m.scheduled_at).getTime() >= now && !["finished","verified"].includes(m.status);
       const isLive = ["live","in_progress","halftime"].includes(m.status);
@@ -64,6 +69,8 @@ export default function MatchesPage() {
     </section>
 
     <section className="container match-centre">
+      <div className="mc-date-strip">{days.map(d => <button key={d.key} className={selectedDate === d.key ? "mc-day active" : "mc-day"} onClick={() => setSelectedDate(d.key)}><b>{d.label}</b><span>{d.date}</span></button>)}<label className="mc-calendar"><span>Calendar</span><input type="date" value={selectedDate} onChange={e => setSelectedDate(e.target.value)} /></label></div>
+
       <div className="mc-tabs">
         {[
           ["all","All football"],["upcoming","Upcoming"],["live","Live"],["results","Results"]
