@@ -50,7 +50,21 @@ export default function TeamsPage() {
     if(error)setError(error.message); else {setForm({name:"",short_name:"",area:"",home_venue:"",founded_year:""});setNotice("Team created.");await load()} setSaving(false);
   }
   async function toggleTeam(t:Team){const s=createSupabaseBrowserClient();const {error}=await s.from("teams").update({is_active:!t.is_active}).eq("id",t.id);if(error)setError(error.message);else await load()}
-  async function deleteTeam(t:Team){if(!window.confirm("Delete "+t.name+"? Historical or assigned records may prevent deletion."))return;const s=createSupabaseBrowserClient();const {error}=await s.from("teams").delete().eq("id",t.id);if(error)setError(error.message);else{setNotice("Team deleted.");await load()}}
+  async function deleteTeam(t:Team){
+ if(!window.confirm("Archive "+t.name+"? ZEDEK SPORTS will preserve teams with historical or competition records."))return;
+ const s=createSupabaseBrowserClient();
+ const checks=await Promise.all([
+  s.from("matches").select("id",{count:"exact",head:true}).or("home_team_id.eq."+t.id+",away_team_id.eq."+t.id),
+  s.from("season_teams").select("season_id",{count:"exact",head:true}).eq("team_id",t.id),
+  s.from("stage_teams").select("stage_id",{count:"exact",head:true}).eq("team_id",t.id),
+  s.from("team_coaches").select("id",{count:"exact",head:true}).eq("team_id",t.id),
+  s.from("match_events").select("id",{count:"exact",head:true}).eq("team_id",t.id)
+ ]);
+ const failed=checks.find(x=>x.error);if(failed?.error){setError(failed.error.message);return}
+ const historical=checks.reduce((n,x)=>n+(x.count||0),0)>0;
+ const {error}=await s.from("teams").update({is_active:false}).eq("id",t.id);
+ if(error)setError(error.message);else{setNotice(historical?"Team archived because football history or assignments exist.":"Team deactivated safely; its record remains available for future use.");await load()}
+}
   async function seasonToggle(teamId:string){
     const s=createSupabaseBrowserClient(); setError("");
     const exists=seasonTeamIds.has(teamId);
@@ -85,7 +99,7 @@ export default function TeamsPage() {
       {stageId&&<><label>Target group<select value={groupId} onChange={e=>setGroupId(e.target.value)}><option value="">No group</option>{groupOptions.map(g=><option key={g.id} value={g.id}>{g.name}</option>)}</select></label>
       <div className="module-grid">{teams.filter(t=>seasonTeamIds.has(t.id)).map(t=><article className="module" key={t.id}><strong>{t.name}</strong><small>{stageTeamIds.has(t.id)?"Assigned to stage":"Not assigned"}</small><button className="button" onClick={()=>stageAssign(t.id)}>{stageTeamIds.has(t.id)?"Move to selected group":"Assign to stage"}</button></article>)}</div></>}
     </div></section>
-    <section className="container section"><div className="section-heading"><h2>Registered teams</h2><span>{teams.length} total</span></div>{loading?<p>Loading teams...</p>:teams.length===0?<div className="panel"><p>No teams yet.</p></div>:<div className="module-grid">{teams.map(t=><article className="module" key={t.id}><strong>{t.name}</strong><small>{t.short_name||"No short name"} · {t.area||"Area not set"}</small><div className="button-row"><button className="button" onClick={()=>toggleTeam(t)}>{t.is_active?"Deactivate":"Activate"}</button><button className="button danger" onClick={()=>deleteTeam(t)}>Delete</button></div></article>)}</div>}</section>
+    <section className="container section"><div className="section-heading"><h2>Registered teams</h2><span>{teams.length} total</span></div>{loading?<p>Loading teams...</p>:teams.length===0?<div className="panel"><p>No teams yet.</p></div>:<div className="module-grid">{teams.map(t=><article className="module" key={t.id}><strong>{t.name}</strong><small>{t.short_name||"No short name"} · {t.area||"Area not set"}</small><div className="button-row"><button className="button" onClick={()=>toggleTeam(t)}>{t.is_active?"Deactivate":"Activate"}</button><button className="button danger" onClick={()=>deleteTeam(t)}>{t.is_active?"Archive":"Archived"}</button></div></article>)}</div>}</section>
     {notice&&<div className="container success-box">{notice}</div>}{error&&<div className="container error-box">{error}</div>}
   </main>
 }
