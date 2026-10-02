@@ -50,37 +50,68 @@ export default function KnockoutPage(){
   try{
    if(!seasonId||!stageId){setError("Choose a season and knockout stage.");return}
    if(stageTies.length){setError("This stage already has ties. Generate only on an empty knockout stage.");return}
-   const {data:registered,error:re}=await s.from("stage_teams").select("team_id").eq("stage_id",stageId);
-   if(re){setError(re.message);return}
-   const ids=(registered||[]).map((x:any)=>x.team_id).filter(Boolean);
-   if(ids.length<2){setError("At least two teams are required.");return}
-   if(ids.length%2!==0){setError("Automatic bracket generation currently requires an even number of teams.");return}
-   const tieRows:any[]=[];
-   for(let i=0;i<ids.length;i+=2){
-    const {data:t,error:te}=await s.from("knockout_ties").insert({season_id:seasonId,stage_id:stageId,tie_number:i/2+1,leg_count:1,home_team_id:ids[i],away_team_id:ids[i+1],status:"scheduled"}).select("*").single();
-    if(te||!t)throw new Error(te?.message||"Could not create tie.");
-    tieRows.push(t);
-    const {error:le}=await s.from("knockout_tie_legs").insert({tie_id:t.id,leg_number:1,home_team_id:ids[i],away_team_id:ids[i+1]});
-    if(le)throw new Error(le.message);
+   const {data:registered,error:re}=await s.from("stage_teams").select("team_id,seed").eq("stage_id",stageId);
+   if(re)throw new Error(re.message);
+   const seeded=(registered||[]).map((x:any)=>({id:x.team_id,seed:x.seed})).filter((x:any)=>x.id);
+   if(seeded.length<2){setError("At least two teams are required.");return}
+   const ids=seeded.sort((a:any,b:any)=>(a.seed??999999)-(b.seed??999999)||a.id.localeCompare(b.id)).map((x:any)=>x.id);
+   const power=2**Math.ceil(Math.log2(ids.length));
+   const firstTieCount=power/2;
+   const slots=(ids.length===power)?ids:[...ids,...Array(power-ids.length).fill(null)];
+   const firstRows:any[]=[];
+   for(let i=0;i<firstTieCount;i++){
+    const home=slots[i*2]||null,away=slots[i*2+1]||null;
+    const isBye=!!home!==!!away;
+    const {data:t,error:te}=await s.from("knockout_ties").insert({
+      season_id:seasonId,stage_id:stageId,tie_number:i+1,leg_count:1,
+      home_team_id:home,away_team_id:away,
+      winner_team_id:isBye?(home||away):null,status:isBye?"decided":"scheduled"
+    }).select("*").single();
+    if(te||!t)throw new Error(te?.message||"Could not create first-round tie.");
+    firstRows.push(t);
+    if(!isBye){
+      const {error:le}=await s.from("knockout_tie_legs").insert({tie_id:t.id,leg_number:1,home_team_id:home,away_team_id:away});
+      if(le)throw new Error(le.message);
+    }
    }
-   if(tieRows.length>1 && tieRows.length%2===0){
-    const nextStage=stages.filter(x=>x.season_id===seasonId).sort((a,b)=>a.stage_order-b.stage_order).find(x=>x.stage_order>(stages.find(y=>y.id===stageId)?.stage_order||0)&&["knockout","quarter_final","semi_final","final"].includes(x.stage_type));
-    if(nextStage){
-     const nextRows:any[]=[];
-     for(let i=0;i<tieRows.length;i+=2){
-      const {data:t,error:te}=await s.from("knockout_ties").insert({season_id:seasonId,stage_id:nextStage.id,tie_number:i/2+1,leg_count:1,status:"pending"}).select("*").single();
-      if(te||!t)throw new Error(te?.message||"Could not create next-stage tie.");
+   const orderedStages=stages.filter(x=>x.season_id===seasonId&&["knockout","quarter_final","semi_final","final"].includes(x.stage_type)).sort((a,b)=>a.stage_order-b.stage_order);
+   const currentIndex=orderedStages.findIndex(x=>x.id===stageId);
+   let previous=firstRows;
+   for(let si=currentIndex+1;si<orderedStages.length&&previous.length>1;si++){
+    const nextStage=orderedStages[si];
+    const needed=Math.ceil(previous.length/2);
+    const existing=ties.filter(x=>x.stage_id===nextStage.id);
+    if(existing.length)throw new Error(nextStage.name+" already contains knockout ties. Clear that stage before generating the bracket.");
+    const nextRows:any[]=[];
+    for(let i=0;i<needed;i++){
+      const {data:t,error:te}=await s.from("knockout_ties").insert({
+       season_id:seasonId,stage_id:nextStage.id,tie_number:i+1,leg_count:1,status:"pending"
+      }).select("*").single();
+      if(te||!t)throw new Error(te?.message||"Could not create "+nextStage.name+" tie.");
       nextRows.push(t);
-     }
-     for(let i=0;i<tieRows.length;i++){const next=nextRows[Math.floor(i/2)];await s.from("knockout_ties").update({next_tie_id:next.id,next_slot:i%2===0?1:2}).eq("id",tieRows[i].id)}
-     setMessage("Bracket generated with the next-stage progression links.");
-    }else setMessage("Bracket generated. No later knockout stage exists yet.");
-   }else setMessage("Bracket generated.");
+      const {error:le}=await s.from("knockout_tie_legs").insert({tie_id:t.id,leg_number:1});
+      if(le)throw new Error(le.message);
+    }
+    for(let i=0;i<previous.length;i++){
+      const next=nextRows[Math.floor(i/2)];
+      const slot=i%2===0?1:2;
+      const {error:ue}=await s.from("knockout_ties").update({next_tie_id:next.id,next_slot:slot}).eq("id",previous[i].id);
+      if(ue)throw new Error(ue.message);
+    }
+    previous=nextRows;
+   }
+   // Push any first-round byes into their next slots immediately.
+   for(const row of firstRows){
+    if(row.status!=="decided"||!row.winner_team_id||!row.next_tie_id)continue;
+    await advanceWinner(row,row.winner_team_id);
+   }
+   setMessage(ids.length===power
+    ?"Full knockout bracket generated."
+    :"Knockout bracket generated with automatic byes for the unmatched slots.");
    await load();
   }catch(e:any){setError(e?.message||"Bracket generation failed.")}
   finally{setGenerating(false)}
  }
-
  async function createTie(){
   setError("");setMessage("");
   if(!seasonId||!stageId){setError("Choose a season and knockout stage.");return}
@@ -117,7 +148,10 @@ export default function KnockoutPage(){
   for(const leg of ls){
    const m=(matches||[]).find((x:any)=>x.id===leg.match_id) as any;
    if(!m)continue;
-   homeTotal+=m.home_score;awayTotal+=m.away_score;
+   // Aggregate by tie participants, not by the physical home/away side of leg 2.
+   if(leg.home_team_id===tie.home_team_id){homeTotal+=m.home_score;awayTotal+=m.away_score}
+   else if(leg.away_team_id===tie.home_team_id){homeTotal+=m.away_score;awayTotal+=m.home_score}
+   else {homeTotal+=m.home_score;awayTotal+=m.away_score}
    let winner:null|string=null;
    if(m.home_score>m.away_score)winner=leg.home_team_id;
    else if(m.away_score>m.home_score)winner=leg.away_team_id;
