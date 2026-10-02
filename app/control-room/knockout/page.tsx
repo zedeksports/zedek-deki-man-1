@@ -125,13 +125,30 @@ export default function KnockoutPage(){
   }
   if(tie.leg_count===1){
    const l=updates[0];
-   if(!l.winner_team_id){setError("A drawn knockout leg needs a penalty winner recorded.");return}
+   if(!l.winner_team_id){
+    const home=teamName(ls[0].home_team_id),away=teamName(ls[0].away_team_id);
+    const choice=window.prompt("Match is level. Enter the deciding winner exactly as shown: "+home+" OR "+away);
+    const winner=choice?.trim()===home?ls[0].home_team_id:choice?.trim()===away?ls[0].away_team_id:null;
+    if(!winner){setError("A valid penalty winner is required: "+home+" or "+away+".");return}
+    l.winner_team_id=winner;l.penalty_winner_team_id=winner;l.resolved_by="penalties";l.extra_time_played=window.confirm("Was extra time played before the penalties?");
+   }
    await s.from("knockout_tie_legs").update(l).eq("id",l.id);
    await s.from("knockout_ties").update({winner_team_id:l.winner_team_id,status:"decided"}).eq("id",tie.id);
    await advanceWinner(tie,l.winner_team_id);
   }else{
    const h=homeTotal,a=awayTotal;
-   if(h===a){setError("Aggregate is level. Record the deciding penalty winner on the tie before advancing.");return}
+   if(h===a){
+    const home=teamName(tie.home_team_id),away=teamName(tie.away_team_id);
+    const choice=window.prompt("Aggregate is level. Enter the deciding winner exactly as shown: "+home+" OR "+away);
+    const winner=choice?.trim()===home?tie.home_team_id:choice?.trim()===away?tie.away_team_id:null;
+    if(!winner){setError("A valid aggregate penalty winner is required: "+home+" or "+away+".");return}
+    const et=window.confirm("Was extra time played before the penalties?");
+    for(const u of updates)if(u.winner_team_id===null){u.penalty_winner_team_id=winner;u.resolved_by="penalties";u.extra_time_played=et}
+    for(const u of updates)await s.from("knockout_tie_legs").update(u).eq("id",u.id);
+    await s.from("knockout_ties").update({winner_team_id:winner,status:"decided"}).eq("id",tie.id);
+    await advanceWinner(tie,winner);
+    setMessage("Two-leg tie resolved by penalties from the aggregate draw.");await load();return
+   }
    const winner=h>a?tie.home_team_id:tie.away_team_id;
    if(!winner){setError("Tie teams are incomplete.");return}
    for(const u of updates)await s.from("knockout_tie_legs").update(u).eq("id",u.id);
