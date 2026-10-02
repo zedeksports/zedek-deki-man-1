@@ -19,7 +19,7 @@ export default function ControlRoomPage(){
   const [fixture,setFixture]=useState({season_id:"",stage_id:"",home_team_id:"",away_team_id:"",scheduled_at:"",venue:"",round_name:"",leg:"1",notes:""});
   const [team,setTeam]=useState({name:"",short_name:"",area:"",home_venue:""});
   const [player,setPlayer]=useState({team_id:"",full_name:"",shirt_number:"",position:""});
-  const [saving,setSaving]=useState(false), [reportMatch,setReportMatch]=useState(null), [report,setReport]=useState(null), [reports,setReports]=useState([]),[liveMatch,setLiveMatch]=useState(null),[events,setEvents]=useState([]),[matchStats,setMatchStats]=useState(null),[clock,setClock]=useState(0),[eventForm,setEventForm]=useState({type:"goal",team_id:"",player_id:"",minute:"",extra_minute:"",details:""}),[lineupMatch,setLineupMatch]=useState(null),[lineupTeam,setLineupTeam]=useState(""),[lineup,setLineup]=useState(null),[lineupPlayers,setLineupPlayers]=useState([]),[lineupLoading,setLineupLoading]=useState(false);
+  const [saving,setSaving]=useState(false),[statsData,setStatsData]=useState({standings:[],scorers:[],recent:[]}), [reportMatch,setReportMatch]=useState(null), [report,setReport]=useState(null), [reports,setReports]=useState([]),[liveMatch,setLiveMatch]=useState(null),[events,setEvents]=useState([]),[matchStats,setMatchStats]=useState(null),[clock,setClock]=useState(0),[eventForm,setEventForm]=useState({type:"goal",team_id:"",player_id:"",minute:"",extra_minute:"",details:""}),[lineupMatch,setLineupMatch]=useState(null),[lineupTeam,setLineupTeam]=useState(""),[lineup,setLineup]=useState(null),[lineupPlayers,setLineupPlayers]=useState([]),[lineupLoading,setLineupLoading]=useState(false);
 
   useEffect(()=>{if(!liveMatch)return;const tick=()=>setClock(elapsed(liveMatch));tick();const id=setInterval(tick,1000);return()=>clearInterval(id);},[liveMatch]);
 
@@ -65,6 +65,19 @@ export default function ControlRoomPage(){
   function displayClock(sec){const min=Math.floor(sec/60),s=sec%60;return String(min).padStart(2,"0")+":"+String(s).padStart(2,"0");}
   async function clockAction(m,action){ const now=new Date().toISOString(); let values={}; if(action==="start")values={status:"live",kickoff_at:now,halftime_at:null,second_half_at:null,finished_at:null}; if(action==="halftime")values={status:"halftime",halftime_at:now}; if(action==="resume")values={status:"live",second_half_at:now}; if(action==="finish")values={status:"finished",finished_at:now}; await updateMatch(m.id,values); setLiveMatch({...m,...values}); }
   async function addEvent(){ if(!liveMatch)return; const supabase=getSupabase(); setSaving(true); const minute=eventForm.minute?Number(eventForm.minute):Math.floor(clock/60); const result=await supabase.from("match_events").insert({match_id:liveMatch.id,team_id:eventForm.team_id||null,player_id:eventForm.player_id||null,event_type:eventForm.type,minute,extra_minute:eventForm.extra_minute?Number(eventForm.extra_minute):null,details:eventForm.details||null}); if(result.error){setError(result.error.message);setSaving(false);return;} if(eventForm.type==="goal"&&eventForm.team_id){const home=eventForm.team_id===liveMatch.home_team_id; const values=home?{home_score:(liveMatch.home_score||0)+1}:{away_score:(liveMatch.away_score||0)+1}; await updateMatch(liveMatch.id,values); setLiveMatch({...liveMatch,...values});} setEventForm({type:"goal",team_id:"",player_id:"",minute:"",extra_minute:"",details:""});setSaving(false);await loadLive(liveMatch.id); }
+  async function loadStats(){
+    const supabase=getSupabase(); if(!supabase)return;
+    const [m,e]=await Promise.all([
+      supabase.from("matches").select("id,scheduled_at,status,home_score,away_score,home_team_id,away_team_id,home:teams!matches_home_team_id_fkey(id,name),away:teams!matches_away_team_id_fkey(id,name)").in("status",["finished","verified"]).order("scheduled_at",{ascending:false}),
+      supabase.from("match_events").select("match_id,team_id,player_id,event_type,players(full_name,shirt_number),teams(name)").in("event_type",["goal","own_goal","yellow_card","red_card"])
+    ]);
+    if(m.error){setError(m.error.message);return;} if(e.error){setError(e.error.message);return;}
+    const map={}; const ensure=(id,name)=>{if(!id)return null;if(!map[id])map[id]={team_id:id,team:name||"Unknown",played:0,wins:0,draws:0,losses:0,gf:0,ga:0,gd:0,points:0};return map[id];};
+    (m.data||[]).forEach(x=>{const h=ensure(x.home_team_id,x.home?.name),a=ensure(x.away_team_id,x.away?.name);if(!h||!a)return;h.played++;a.played++;h.gf+=x.home_score||0;h.ga+=x.away_score||0;a.gf+=x.away_score||0;a.ga+=x.home_score||0;if((x.home_score||0)>(x.away_score||0)){h.wins++;h.points+=3;a.losses++;}else if((x.home_score||0)<(x.away_score||0)){a.wins++;a.points+=3;h.losses++;}else{h.draws++;a.draws++;h.points++;a.points++;}});
+    Object.values(map).forEach(x=>x.gd=x.gf-x.ga);
+    const scorers={}; (e.data||[]).forEach(x=>{if(x.event_type!=="goal"||!x.player_id)return;const p=x.players;if(!scorers[x.player_id])scorers[x.player_id]={player_id:x.player_id,player:p?.full_name||"Unknown",shirt_number:p?.shirt_number||"",team:x.teams?.name||"Unknown",goals:0};scorers[x.player_id].goals++;});
+    setStatsData({standings:Object.values(map).sort((a,b)=>b.points-a.points||b.gd-a.gd||b.gf-a.gf||a.team.localeCompare(b.team)),scorers:Object.values(scorers).sort((a,b)=>b.goals-a.goals||a.player.localeCompare(b.player)),recent:(m.data||[]).slice(0,10)});
+  }
   async function loadReports(){
     const supabase=getSupabase(); if(!supabase)return;
     const r=await supabase.from("match_reports").select("*,match:matches(id,home_score,away_score,home:teams!matches_home_team_id_fkey(name),away:teams!matches_away_team_id_fkey(name))").order("created_at",{ascending:false});
@@ -157,6 +170,11 @@ export default function ControlRoomPage(){
         {TABS.map(item=><button key={item} className={"button "+(tab===item?"primary":"")} onClick={()=>setTab(item)}>{item.replace("_"," ").replace(/^./,x=>x.toUpperCase())}</button>)}
       </div>
 
+      {tab==="stats"&&<div className="stats-grid">
+        <div className="panel"><h2>Statistics Hub</h2><p className="muted">Official results from finished and verified matches.</p><button className="button primary" onClick={loadStats}>Refresh statistics</button>
+          <h3>Standings</h3><div className="table-wrap"><table><thead><tr><th>#</th><th>Team</th><th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr></thead><tbody>{statsData.standings.map((x,i)=><tr key={x.team_id}><td>{i+1}</td><td>{x.team}</td><td>{x.played}</td><td>{x.wins}</td><td>{x.draws}</td><td>{x.losses}</td><td>{x.gf}</td><td>{x.ga}</td><td>{x.gd}</td><td><b>{x.points}</b></td></tr>)}</tbody></table></div>{!statsData.standings.length&&<p className="muted">No finished or verified matches yet.</p>}</div>
+        <div className="panel"><h2>Top Scorers</h2>{statsData.scorers.map((x,i)=><div className="status-card" key={x.player_id}><b>{i+1}. {x.player}</b><span>{x.team} · {x.goals} goal{x.goals===1?"":"s"}</span></div>)}{!statsData.scorers.length&&<p className="muted">No recorded goals yet.</p>}<h2 style={{marginTop:20}}>Recent Results</h2>{statsData.recent.map(x=><div className="status-card" key={x.id}><b>{x.home?.name} {x.home_score??0} — {x.away_score??0} {x.away?.name}</b><span>{fmtDate(x.scheduled_at)} · {x.status}</span></div>)}</div>
+      </div>
       {tab==="overview"&&<div className="grid">
         <div className="card"><h2>{competitions.length}</h2><p>Competitions</p></div><div className="card"><h2>{seasons.length}</h2><p>Seasons</p></div>
         <div className="card"><h2>{stages.length}</h2><p>Stages</p></div><div className="card"><h2>{matches.length}</h2><p>Fixtures</p></div>
