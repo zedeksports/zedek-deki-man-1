@@ -29,7 +29,6 @@ export default function StatisticsPage() {
       supabase.from("matches").select("id,season_id,home_team_id,away_team_id,home_score,away_score,status").eq("season_id", id).in("status", ["finished", "verified"]),
       supabase.from("match_events").select("match_id,team_id,player_id,event_type,minute").in("event_type", ["goal", "own_goal"]),
       supabase.from("season_teams").select("team_id").eq("season_id", id),
-      supabase.from("season_teams").select("team_id").eq("season_id", id),
     ]);
     if (matchRes.error || eventRes.error || registrationRes.error) {
       setError(matchRes.error?.message || eventRes.error?.message || registrationRes.error?.message || "Unable to load statistics.");
@@ -37,7 +36,6 @@ export default function StatisticsPage() {
       setMatches(matchRes.data || []);
       const ids = new Set((matchRes.data || []).map(m => m.id));
       setEvents((eventRes.data || []).filter(e => ids.has(e.match_id)));
-      setRegisteredTeamIds((registrationRes.data || []).map(x => x.team_id));
       setRegisteredTeamIds((registrationRes.data || []).map(x => x.team_id));
     }
     setLoading(false);
