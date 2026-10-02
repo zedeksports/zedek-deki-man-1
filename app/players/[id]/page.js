@@ -2,7 +2,7 @@
 
 import {useEffect,useMemo,useState} from "react";
 import {useParams} from "next/navigation";
-import {createSupabaseBrowserClient} from "../../lib/supabase/browser";
+import {createSupabaseBrowserClient} from "../../../lib/supabase/browser";
 
 function date(v){return v?new Intl.DateTimeFormat("en-GH",{day:"numeric",month:"short",year:"numeric"}).format(new Date(v)):"Date TBC"}
 
