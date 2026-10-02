@@ -281,3 +281,8 @@ textarea {
 .error-box { padding: 12px; border: 1px solid #7f1d1d; border-radius: 10px; background: rgba(127,29,29,.15); color: #fecaca; }
 .success-box { padding: 12px; border: 1px solid #166534; border-radius: 10px; background: rgba(22,101,52,.15); color: #bbf7d0; }
 .back-link { color: var(--muted); }
+
+.panel { border: 1px solid var(--line); border-radius: 16px; background: var(--panel); padding: 22px; }
+.section-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.section-heading span { color: var(--muted); }
+.button-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
