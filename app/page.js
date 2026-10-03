@@ -3,13 +3,6 @@
 import { useEffect, useMemo, useState } from "react";
 import HomeLiveData from "./HomeLiveData";
 
-const nav = [
-  ["Matches", "/matches"],
-  ["Teams", "/teams"],
-  ["Competitions", "/competitions"],
-  ["Statistics", "/statistics"],
-];
-
 const filters = ["ALL", "LIVE", "UPCOMING", "RESULTS", "MY TEAMS"];
 
 function dayItems() {
@@ -33,49 +26,12 @@ function dayItems() {
 }
 
 export default function HomePage() {
-  const [night, setNight] = useState(false);
-  const [searchOpen, setSearchOpen] = useState(false);
   const days = useMemo(() => dayItems(), []);
   const [selectedDay, setSelectedDay] = useState(days[0].key);
   const [filter, setFilter] = useState("ALL");
 
-  useEffect(() => {
-    setNight(localStorage.getItem("zedek-theme") === "night");
-  }, []);
-
-  function toggleTheme() {
-    const next = !night;
-    setNight(next);
-    localStorage.setItem("zedek-theme", next ? "night" : "day");
-  }
-
   return (
-    <main className={night ? "page theme-night" : "page theme-day"}>
-      <header className="site-header zedek-score-header">
-        <div className="container nav">
-          <a className="brand" href="/" aria-label="Zedek Sports home">
-            <span className="brand-mark">Z</span>
-            <span>ZEDEK <b>SPORTS</b></span>
-          </a>
-          <nav className="nav-links" aria-label="Main navigation">
-            {nav.map(([label, href]) => <a key={href} href={href}>{label}</a>)}
-          </nav>
-          <div className="header-actions">
-            <button className="icon-button" onClick={() => setSearchOpen((x) => !x)} aria-label="Search Zedek Sports" title="Search">⌕</button>
-            <button className="theme-button" onClick={toggleTheme} aria-label="Toggle day and night mode">{night ? "☀" : "☾"}</button>
-          </div>
-        </div>
-      </header>
-
-      <div className={searchOpen ? "quick-search open" : "quick-search"}>
-        <form className="container quick-search-inner" action="/search" method="get">
-          <span>⌕</span>
-          <input name="q" placeholder="Search teams, players, competitions or matches…" aria-label="Quick search" />
-          <button type="submit">Search</button>
-          <a href="/search">Full search →</a>
-        </form>
-      </div>
-
+    <main className="page theme-day">
       <section className="score-hero">
         <div className="container score-hero-inner">
           <div>
@@ -147,12 +103,6 @@ export default function HomePage() {
         </div>
       </section>
 
-      <footer className="site-footer">
-        <div className="container footer-inner">
-          <div><div className="brand footer-brand"><span className="brand-mark">Z</span><span>ZEDEK <b>SPORTS</b></span></div><p>Local football. Properly followed.</p></div>
-          <div className="footer-links">{nav.map(([label, href]) => <a key={href} href={href}>{label}</a>)}</div>
-        </div>
-      </footer>
     </main>
   );
 }
