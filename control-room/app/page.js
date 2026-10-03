@@ -23,6 +23,7 @@ export default function ControlRoomPage(){
   const [saving,setSaving]=useState(false),[statsCompetitionId,setStatsCompetitionId]=useState(""),[statsSeasonId,setStatsSeasonId]=useState(""),[officialStats,setOfficialStats]=useState([]),[statsData,setStatsData]=useState({standings:[],scorers:[],recent:[],form:[]}),[h2hHome,setH2hHome]=useState(""),[h2hAway,setH2hAway]=useState(""),[h2hData,setH2hData]=useState([]),[h2hSummary,setH2hSummary]=useState(null), [reportMatch,setReportMatch]=useState(null), [report,setReport]=useState(null), [reports,setReports]=useState([]),[liveMatch,setLiveMatch]=useState(null),[events,setEvents]=useState([]),[matchStats,setMatchStats]=useState(null),[clock,setClock]=useState(0),[eventForm,setEventForm]=useState({type:"goal",team_id:"",player_id:"",secondary_player_id:"",minute:"",extra_minute:"",details:""}),[lineupMatch,setLineupMatch]=useState(null),[lineupTeam,setLineupTeam]=useState(""),[lineup,setLineup]=useState(null),[lineupPlayers,setLineupPlayers]=useState([]),[lineupLoading,setLineupLoading]=useState(false);
 
   useEffect(()=>{if(!liveMatch)return;const tick=()=>setClock(elapsed(liveMatch));tick();const id=setInterval(tick,1000);return()=>clearInterval(id);},[liveMatch]);
+  useEffect(()=>{if(!loading&&tab==="stats")loadStats();},[loading,tab,statsCompetitionId,statsSeasonId]);
 
   async function refresh(){
     setError(""); const supabase=getSupabase(); if(!supabase)return;
@@ -132,7 +133,29 @@ export default function ControlRoomPage(){
     setSaving(false);setEditingPlayerId("");setPlayer({id:"",team_id:"",full_name:"",shirt_number:"",position:"",image:null});setNotice(editingPlayerId?"Player updated successfully.":"Player registered successfully.");await refresh();
   }
   function editPlayer(x){setEditingPlayerId(x.id);setPlayer({id:x.id,team_id:x.team_id||"",full_name:x.full_name||"",shirt_number:x.shirt_number??"",position:x.position||"",image:null});setTab("players");window.scrollTo({top:0,behavior:"smooth"});}
-  async function deletePlayer(x){if(!window.confirm("Delete "+x.full_name+"? This cannot be undone."))return;setSaving(true);setError("");setNotice("");const supabase=getSupabase();const result=await supabase.from("players").delete().eq("id",x.id);if(result.error){setSaving(false);setError("Player could not be deleted: "+result.error.message);return;}setSaving(false);setNotice("Player deleted successfully.");await refresh();}
+  async function deletePlayer(x){
+    if(!window.confirm("Remove "+x.full_name+" from the active player registry? Historical records will be preserved."))return;
+    setSaving(true);setError("");setNotice("");
+    const supabase=getSupabase();
+    const refs=await Promise.all([
+      supabase.from("match_events").select("id",{count:"exact",head:true}).eq("player_id",x.id),
+      supabase.from("match_events").select("id",{count:"exact",head:true}).eq("secondary_player_id",x.id),
+      supabase.from("match_lineup_players").select("id",{count:"exact",head:true}).eq("player_id",x.id),
+      supabase.from("match_lineups").select("id",{count:"exact",head:true}).eq("captain_player_id",x.id),
+      supabase.from("official_player_statistics").select("id",{count:"exact",head:true}).eq("player_id",x.id)
+    ]);
+    const refError=refs.find(r=>r.error);
+    if(refError){setSaving(false);setError("Player reference check failed: "+refError.error.message);return;}
+    const referenced=refs.some(r=>(r.count||0)>0);
+    if(referenced){
+      const archived=await supabase.from("players").update({is_active:false}).eq("id",x.id);
+      if(archived.error){setSaving(false);setError("Player could not be deactivated: "+archived.error.message);return;}
+      setSaving(false);setNotice(x.full_name+" was deactivated because historical match records reference this player. Historical data was preserved.");await refresh();return;
+    }
+    const result=await supabase.from("players").delete().eq("id",x.id);
+    if(result.error){setSaving(false);setError("Player could not be deleted: "+result.error.message);return;}
+    setSaving(false);setNotice("Player removed successfully.");await refresh();
+  }
 
   async function save(table,values,reset){
     setSaving(true);setError("");setNotice("");const supabase=getSupabase();
@@ -364,7 +387,7 @@ export default function ControlRoomPage(){
           <div className="panel">
             <h2>Statistics Hub</h2>
             <p className="muted">Official results from finished and verified matches.</p>
-            <label>Competition<select value={statsCompetitionId} onChange={e=>{setStatsCompetitionId(e.target.value);setStatsSeasonId("");setStatsData({standings:[],scorers:[],recent:[]});setOfficialStats([]);}}><option value="">All competitions</option>{competitions.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label><label>Season<select value={statsSeasonId} onChange={e=>{setStatsSeasonId(e.target.value);setStatsData({standings:[],scorers:[],recent:[]});setOfficialStats([]);}}><option value="">All seasons</option>{seasons.filter(x=>!statsCompetitionId||x.competition_id===statsCompetitionId).map(x=><option key={x.id} value={x.id}>{x.name} · {x.competitions?.name||"Competition"}</option>)}</select></label>
+            <label>Competition<select value={statsCompetitionId} onChange={e=>{setStatsCompetitionId(e.target.value);setStatsSeasonId("");setStatsData({standings:[],scorers:[],recent:[],form:[]});setOfficialStats([]);}}><option value="">All competitions</option>{competitions.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label><label>Season<select value={statsSeasonId} onChange={e=>{setStatsSeasonId(e.target.value);setStatsData({standings:[],scorers:[],recent:[],form:[]});setOfficialStats([]);}}><option value="">All seasons</option>{seasons.filter(x=>!statsCompetitionId||x.competition_id===statsCompetitionId).map(x=><option key={x.id} value={x.id}>{x.name} · {x.competitions?.name||"Competition"}</option>)}</select></label>
             <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="button primary" onClick={loadStats}>Refresh statistics</button><button className="button" onClick={rebuildOfficialStats} disabled={saving}>{saving?"Rebuilding…":"Rebuild official player stats"}</button></div><div className="panel" style={{marginTop:16}}><h2>Official Player Statistics</h2><p className="muted">Verified-match statistics generated from official lineups and events.</p>{officialStats.length?<div className="form-stack">{officialStats.slice(0,50).map(x=><div className="status-card" key={x.id}><b>{x.players?.full_name||"Unknown player"} {x.players?.shirt_number?"· #"+x.players.shirt_number:""}</b><span>{x.teams?.name||"Team"} · Apps {x.matches_played} · Starts {x.starts} · Goals {x.goals} · Assists {x.assists} · YC {x.yellow_cards} · RC {x.red_cards} · Minutes {x.minutes_played}</span></div>)}</div>:<p className="muted">No official player statistics for the selected scope yet.</p>}</div>
             <h3>Standings</h3>
             <div className="table-wrap">
