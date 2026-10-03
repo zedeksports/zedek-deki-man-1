@@ -122,3 +122,16 @@ button,.button,.mc-tab,.mc-day,.mc-calendar input,.team-tabs button{touch-action
 .match-context-links{display:flex;gap:18px;flex-wrap:wrap;margin-top:12px;font-size:13px;font-weight:700}
 .match-detail-team{text-decoration:none;color:inherit}
 .lineup-player strong a{text-decoration:none;color:inherit}
+
+
+html[data-zedek-theme="night"]{--cream:#0d1725;--cream-2:#142236;--ink:#f6f1e5;--gold:#d2aa58;--gold-soft:#4a3b20;--line:#2c3a4d;--muted:#aab4c0;--white:#132033;--shadow:0 18px 50px rgba(0,0,0,.24);background:var(--cream)}
+html[data-zedek-theme="night"] body{background:var(--cream);color:var(--ink)}
+html[data-zedek-theme="night"] .page{background:var(--cream);color:var(--ink)}
+html[data-zedek-theme="night"] .theme-night .score-hero,
+html[data-zedek-theme="night"] .score-hero{background:var(--cream)}
+html[data-zedek-theme="night"] .quick-search,
+html[data-zedek-theme="night"] .search-result,
+html[data-zedek-theme="night"] .search-intro,
+html[data-zedek-theme="night"] .search-field-wrap{background:var(--white)}
+html[data-zedek-theme="night"] .score-hero{background:linear-gradient(135deg,#101c2d,#0d1725)}
+html[data-zedek-theme="night"] .score-live-banner{background:rgba(179,32,42,.08)}
