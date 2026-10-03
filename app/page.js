@@ -17,9 +17,24 @@ function dayItems() {
     const d = new Date(base);
     d.setDate(base.getDate() + i);
     return {
-      key: d.toISOString().slice(0, 10),
-      day: i === 0 ? "TODAY" : d.toLocaleDateString("en-GH", { weekday: "short" }).toUpperCase(),
-      date: d.toLocaleDateString("en-GH", { day: "numeric", month: "short" }),
+      key: new Intl.DateTimeFormat("en-CA", {
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+        timeZone: "Africa/Accra",
+      }).format(d),
+      day:
+        i === 0
+          ? "TODAY"
+          : d.toLocaleDateString("en-GH", {
+              weekday: "short",
+              timeZone: "Africa/Accra",
+            }).toUpperCase(),
+      date: d.toLocaleDateString("en-GH", {
+        day: "numeric",
+        month: "short",
+        timeZone: "Africa/Accra",
+      }),
     };
   });
 }
@@ -27,8 +42,8 @@ function dayItems() {
 export default function HomePage() {
   const [night, setNight] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
-  const [selectedDay, setSelectedDay] = useState(dayItems()[0].key);
   const days = useMemo(() => dayItems(), []);
+  const [selectedDay, setSelectedDay] = useState(days[0].key);
 
   useEffect(() => {
     setNight(localStorage.getItem("zedek-theme") === "night");
@@ -45,13 +60,16 @@ export default function HomePage() {
       <header className="site-header zedek-score-header">
         <div className="container nav">
           <a className="brand" href="/" aria-label="Zedek Sports home">
-            <span className="brand-mark">Z</span><span>ZEDEK <b>SPORTS</b></span>
+            <span className="brand-mark">Z</span>
+            <span>ZEDEK <b>SPORTS</b></span>
           </a>
           <nav className="nav-links" aria-label="Main navigation">
-            {nav.map(([label, href]) => <a key={href} href={href}>{label}</a>)}
+            {nav.map(([label, href]) => (
+              <a key={href} href={href}>{label}</a>
+            ))}
           </nav>
           <div className="header-actions">
-            <button className="icon-button" onClick={() => setSearchOpen(x => !x)} aria-label="Search Zedek Sports" title="Search">⌕</button>
+            <button className="icon-button" onClick={() => setSearchOpen((x) => !x)} aria-label="Search Zedek Sports" title="Search">⌕</button>
             <button className="theme-button" onClick={toggleTheme} aria-label="Toggle day and night mode">{night ? "☀" : "☾"}</button>
           </div>
         </div>
@@ -92,14 +110,19 @@ export default function HomePage() {
         </div>
 
         <div className="score-date-strip" aria-label="Match dates">
-          {days.map(d => (
-            <button key={d.key} className={selectedDay === d.key ? "score-day active" : "score-day"} onClick={() => setSelectedDay(d.key)}>
+          {days.map((d) => (
+            <button
+              type="button"
+              key={d.key}
+              className={selectedDay === d.key ? "score-day active" : "score-day"}
+              onClick={() => setSelectedDay(d.key)}
+            >
               <b>{d.day}</b><span>{d.date}</span>
             </button>
           ))}
           <label className="score-calendar" aria-label="Choose match date">
             <span>CAL</span>
-            <input type="date" value={selectedDay} onChange={e => setSelectedDay(e.target.value)} />
+            <input type="date" value={selectedDay} onChange={(e) => setSelectedDay(e.target.value)} />
           </label>
         </div>
 
@@ -117,7 +140,7 @@ export default function HomePage() {
           <a href="/matches">Open live matches →</a>
         </div>
 
-        <HomeLiveData />
+        <HomeLiveData selectedDay={selectedDay} />
       </section>
 
       <section className="container score-explore">
