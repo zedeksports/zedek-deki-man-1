@@ -147,6 +147,66 @@ export default function ControlRoomPage(){
   function lineupEligible(m){if(!m)return false;if(m.status==="live"||m.status==="halftime")return true;if(m.status!=="scheduled"||!m.scheduled_at)return false;return Date.now()>=new Date(m.scheduled_at).getTime()-30*60*1000;}
   async function clockAction(m,action){ const now=new Date().toISOString(); let values={}; if(action==="start")values={status:"live",kickoff_at:now,halftime_at:null,second_half_at:null,finished_at:null}; if(action==="halftime")values={status:"halftime",halftime_at:now}; if(action==="resume")values={status:"live",second_half_at:now}; if(action==="finish")values={status:"finished",finished_at:now}; await updateMatch(m.id,values); setLiveMatch({...m,...values}); }
   async function addEvent(){ if(!liveMatch)return; const supabase=getSupabase(); setSaving(true); setError(""); const minute=eventForm.minute?Number(eventForm.minute):Math.floor(clock/60); const teamId=eventForm.team_id||null; const playerId=eventForm.player_id||null; if((eventForm.type!=="note"&&eventForm.type!=="var")&&!teamId){setError("Select a team for this event.");setSaving(false);return;} if(playerId){const p=players.find(x=>x.id===playerId);if(!p||p.team_id!==teamId){setError("The selected player does not belong to the selected team.");setSaving(false);return;}} const result=await supabase.from("match_events").insert({match_id:liveMatch.id,team_id:teamId,player_id:playerId,secondary_player_id:eventForm.secondary_player_id||null,event_type:eventForm.type,minute,extra_minute:eventForm.extra_minute?Number(eventForm.extra_minute):null,details:eventForm.details||null}); if(result.error){setError(result.error.message);setSaving(false);return;} if((eventForm.type==="goal"||eventForm.type==="own_goal")&&teamId){const scoringTeam=eventForm.type==="own_goal"?(teamId===liveMatch.home_team_id?liveMatch.away_team_id:liveMatch.home_team_id):teamId; const home=scoringTeam===liveMatch.home_team_id; const values=home?{home_score:(liveMatch.home_score||0)+1}:{away_score:(liveMatch.away_score||0)+1}; const upd=await supabase.from("matches").update(values).eq("id",liveMatch.id); if(upd.error){setError(upd.error.message);setSaving(false);return;} setLiveMatch({...liveMatch,...values});} setEventForm({type:"goal",team_id:"",player_id:"",secondary_player_id:"",minute:"",extra_minute:"",details:""});setSaving(false);await loadLive(liveMatch.id); }
+  async function rebuildOfficialStats(){
+    const supabase=getSupabase(); if(!supabase)return;
+    setSaving(true); setError(""); setNotice("");
+    try{
+      let q=supabase.from("matches").select("id,season_id,home_team_id,away_team_id").eq("status","verified");
+      if(statsSeasonId) q=q.eq("season_id",statsSeasonId);
+      else if(statsCompetitionId){
+        const seasonIds=seasons.filter(x=>x.competition_id===statsCompetitionId).map(x=>x.id);
+        if(!seasonIds.length){setNotice("No seasons are registered for this competition yet.");return;}
+        q=q.in("season_id",seasonIds);
+      }
+      const matchesResult=await q;
+      if(matchesResult.error)throw matchesResult.error;
+      const matches=matchesResult.data||[];
+      const matchIds=matches.map(x=>x.id);
+      if(!matchIds.length){setNotice("No verified matches are available for this scope.");return;}
+      const ver=await supabase.from("match_verifications").select("match_id,official_result").in("match_id",matchIds).eq("official_result",true);
+      if(ver.error)throw ver.error;
+      const officialIds=(ver.data||[]).map(x=>x.match_id);
+      const officialMatches=matches.filter(x=>officialIds.includes(x.id));
+      if(!officialMatches.length){setNotice("No officially verified results are available for this scope.");return;}
+      const lineups=await supabase.from("match_lineups").select("id,match_id,team_id").in("match_id",officialMatches.map(x=>x.id));
+      if(lineups.error)throw lineups.error;
+      const lineupIds=(lineups.data||[]).map(x=>x.id);
+      const lp=lineupIds.length?await supabase.from("match_lineup_players").select("lineup_id,player_id,role").in("lineup_id",lineupIds):{data:[],error:null};
+      if(lp.error)throw lp.error;
+      const ev=await supabase.from("match_events").select("match_id,team_id,player_id,secondary_player_id,event_type").in("match_id",officialMatches.map(x=>x.id));
+      if(ev.error)throw ev.error;
+      const lineupById={}; (lineups.data||[]).forEach(x=>{lineupById[x.id]=x;});
+      const aggregate={};
+      const touch=(seasonId,playerId,teamId)=>{if(!playerId||!seasonId||!teamId)return null;const key=seasonId+"|"+playerId+"|"+teamId;if(!aggregate[key])aggregate[key]={season_id:seasonId,player_id:playerId,team_id:teamId,matches_played:0,starts:0,goals:0,assists:0,yellow_cards:0,red_cards:0,minutes_played:0};return aggregate[key];};
+      const matchSeason={}; officialMatches.forEach(x=>{matchSeason[x.id]=x.season_id;});
+      const participation={};
+      (lp.data||[]).forEach(x=>{
+        const l=lineupById[x.lineup_id]; if(!l)return;
+        const key=l.match_id+"|"+x.player_id+"|"+l.team_id;
+        if(!participation[key])participation[key]={match_id:l.match_id,player_id:x.player_id,team_id:l.team_id,role:x.role};
+      });
+      Object.values(participation).forEach(x=>{
+        const s=touch(matchSeason[x.match_id],x.player_id,x.team_id); if(!s)return;
+        s.matches_played+=1; if(x.role==="starter"){s.starts+=1;s.minutes_played+=90;}
+      });
+      (ev.data||[]).forEach(x=>{
+        const seasonId=matchSeason[x.match_id]; if(!seasonId)return;
+        if(x.event_type==="goal"&&x.player_id){const s=touch(seasonId,x.player_id,x.team_id);if(s)s.goals+=1;}
+        if((x.event_type==="goal"||x.event_type==="assist")&&x.secondary_player_id){const s=touch(seasonId,x.secondary_player_id,x.team_id);if(s)s.assists+=1;}
+        if(x.event_type==="yellow_card"&&x.player_id){const s=touch(seasonId,x.player_id,x.team_id);if(s)s.yellow_cards+=1;}
+        if(x.event_type==="red_card"&&x.player_id){const s=touch(seasonId,x.player_id,x.team_id);if(s)s.red_cards+=1;}
+      });
+      const rows=Object.values(aggregate);
+      if(rows.length){
+        const up=await supabase.from("official_player_statistics").upsert(rows,{onConflict:"season_id,player_id,team_id"});
+        if(up.error)throw up.error;
+      }
+      await loadStats();
+      setNotice("Official player statistics rebuilt from verified results, lineups and match events.");
+    }catch(err){setError("Statistics rebuild failed: "+err.message);}
+    finally{setSaving(false);}
+  }
+
   async function loadStats(){
     const supabase=getSupabase(); if(!supabase)return;
     setError(""); setNotice("");
@@ -305,7 +365,7 @@ export default function ControlRoomPage(){
             <h2>Statistics Hub</h2>
             <p className="muted">Official results from finished and verified matches.</p>
             <label>Competition<select value={statsCompetitionId} onChange={e=>{setStatsCompetitionId(e.target.value);setStatsSeasonId("");setStatsData({standings:[],scorers:[],recent:[]});setOfficialStats([]);}}><option value="">All competitions</option>{competitions.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label><label>Season<select value={statsSeasonId} onChange={e=>{setStatsSeasonId(e.target.value);setStatsData({standings:[],scorers:[],recent:[]});setOfficialStats([]);}}><option value="">All seasons</option>{seasons.filter(x=>!statsCompetitionId||x.competition_id===statsCompetitionId).map(x=><option key={x.id} value={x.id}>{x.name} · {x.competitions?.name||"Competition"}</option>)}</select></label>
-            <button className="button primary" onClick={loadStats}>Refresh statistics</button><div className="panel" style={{marginTop:16}}><h2>Official Player Statistics</h2><p className="muted">Verified-match statistics generated from official lineups and events.</p>{officialStats.length?<div className="form-stack">{officialStats.slice(0,50).map(x=><div className="status-card" key={x.id}><b>{x.players?.full_name||"Unknown player"} {x.players?.shirt_number?"· #"+x.players.shirt_number:""}</b><span>{x.teams?.name||"Team"} · Apps {x.matches_played} · Starts {x.starts} · Goals {x.goals} · Assists {x.assists} · YC {x.yellow_cards} · RC {x.red_cards} · Minutes {x.minutes_played}</span></div>)}</div>:<p className="muted">No official player statistics for the selected scope yet.</p>}</div>
+            <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="button primary" onClick={loadStats}>Refresh statistics</button><button className="button" onClick={rebuildOfficialStats} disabled={saving}>{saving?"Rebuilding…":"Rebuild official player stats"}</button></div><div className="panel" style={{marginTop:16}}><h2>Official Player Statistics</h2><p className="muted">Verified-match statistics generated from official lineups and events.</p>{officialStats.length?<div className="form-stack">{officialStats.slice(0,50).map(x=><div className="status-card" key={x.id}><b>{x.players?.full_name||"Unknown player"} {x.players?.shirt_number?"· #"+x.players.shirt_number:""}</b><span>{x.teams?.name||"Team"} · Apps {x.matches_played} · Starts {x.starts} · Goals {x.goals} · Assists {x.assists} · YC {x.yellow_cards} · RC {x.red_cards} · Minutes {x.minutes_played}</span></div>)}</div>:<p className="muted">No official player statistics for the selected scope yet.</p>}</div>
             <h3>Standings</h3>
             <div className="table-wrap">
               <table>
