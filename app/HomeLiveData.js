@@ -35,12 +35,11 @@ export default function HomeLiveData({ selectedDay }) {
 
   useEffect(() => {
     let cancelled = false;
-    const supabase = createSupabaseBrowserClient();
-
     async function load() {
       setState((x) => ({ ...x, loading: true, error: "" }));
 
       try {
+        const supabase = createSupabaseBrowserClient();
         const [matches, verifications, teams, competitions] = await Promise.all([
           supabase
             .from("matches")
