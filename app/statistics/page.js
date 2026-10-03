@@ -20,7 +20,7 @@ export default function StatisticsPage(){
     const s=createSupabaseBrowserClient();
     const [c,se,st,p]=await Promise.all([
      s.from("competitions").select("id,name").eq("is_active",true).order("name"),
-     s.from("seasons").select("id,name,year,competition_id").eq("is_active",true).order("year",{ascending:false}),
+     s.from("seasons").select("id,name,year,competition_id,is_active").order("year",{ascending:false}),
      s.from("official_player_statistics").select("id,player_id,season_id,team_id,matches_played,starts,goals,assists,yellow_cards,red_cards,minutes_played,player:players(id,full_name,shirt_number,position,photo_url),team:teams(id,name,short_name,logo_url),season:seasons(id,name,competition:competitions(id,name))").order("goals",{ascending:false}).order("assists",{ascending:false}).limit(500),
      s.from("players").select("id,full_name,shirt_number,position,photo_url,team:teams(id,name,short_name,logo_url)").eq("is_active",true)
     ]);
