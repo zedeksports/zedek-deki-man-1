@@ -1,0 +1,3 @@
+{
+  "buildCommand": "if [ \"$VERCEL_PROJECT_ID\" = \"prj_B8e86wMkdWPTrlNo7bve4YQfynLL\" ]; then cd control-room && next build; else next build; fi"
+}
