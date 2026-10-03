@@ -9,3 +9,5 @@ Private administration and football operations app.
 - Shares the ZEDEK SPORTS Supabase database with the public site
 
 Vercel Root Directory: control-room
+
+Build verification: Vercel project root is configured to this directory.
