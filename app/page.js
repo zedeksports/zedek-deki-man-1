@@ -10,6 +10,8 @@ const nav = [
   ["Statistics", "/statistics"],
 ];
 
+const filters = ["ALL", "LIVE", "UPCOMING", "RESULTS", "MY TEAMS"];
+
 function dayItems() {
   const base = new Date();
   base.setHours(0, 0, 0, 0);
@@ -18,22 +20,13 @@ function dayItems() {
     d.setDate(base.getDate() + i);
     return {
       key: new Intl.DateTimeFormat("en-CA", {
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        timeZone: "Africa/Accra",
+        year: "numeric", month: "2-digit", day: "2-digit", timeZone: "Africa/Accra",
       }).format(d),
-      day:
-        i === 0
-          ? "TODAY"
-          : d.toLocaleDateString("en-GH", {
-              weekday: "short",
-              timeZone: "Africa/Accra",
-            }).toUpperCase(),
+      day: i === 0 ? "TODAY" : d.toLocaleDateString("en-GH", {
+        weekday: "short", timeZone: "Africa/Accra",
+      }).toUpperCase(),
       date: d.toLocaleDateString("en-GH", {
-        day: "numeric",
-        month: "short",
-        timeZone: "Africa/Accra",
+        day: "numeric", month: "short", timeZone: "Africa/Accra",
       }),
     };
   });
@@ -44,6 +37,7 @@ export default function HomePage() {
   const [searchOpen, setSearchOpen] = useState(false);
   const days = useMemo(() => dayItems(), []);
   const [selectedDay, setSelectedDay] = useState(days[0].key);
+  const [filter, setFilter] = useState("ALL");
 
   useEffect(() => {
     setNight(localStorage.getItem("zedek-theme") === "night");
@@ -64,9 +58,7 @@ export default function HomePage() {
             <span>ZEDEK <b>SPORTS</b></span>
           </a>
           <nav className="nav-links" aria-label="Main navigation">
-            {nav.map(([label, href]) => (
-              <a key={href} href={href}>{label}</a>
-            ))}
+            {nav.map(([label, href]) => <a key={href} href={href}>{label}</a>)}
           </nav>
           <div className="header-actions">
             <button className="icon-button" onClick={() => setSearchOpen((x) => !x)} aria-label="Search Zedek Sports" title="Search">⌕</button>
@@ -102,21 +94,15 @@ export default function HomePage() {
 
       <section className="container score-feed">
         <div className="score-topbar">
-          <div>
-            <span className="section-kicker">FOOTBALL</span>
-            <h2>Matches</h2>
-          </div>
+          <div><span className="section-kicker">FOOTBALL</span><h2>Matches</h2></div>
           <a href="/matches" className="score-all-link">All matches →</a>
         </div>
 
         <div className="score-date-strip" aria-label="Match dates">
           {days.map((d) => (
-            <button
-              type="button"
-              key={d.key}
+            <button type="button" key={d.key}
               className={selectedDay === d.key ? "score-day active" : "score-day"}
-              onClick={() => setSelectedDay(d.key)}
-            >
+              onClick={() => setSelectedDay(d.key)}>
               <b>{d.day}</b><span>{d.date}</span>
             </button>
           ))}
@@ -126,12 +112,19 @@ export default function HomePage() {
           </label>
         </div>
 
-        <div className="score-filter-row">
-          <span className="score-filter active">ALL</span>
-          <span className="score-filter">LIVE</span>
-          <span className="score-filter">UPCOMING</span>
-          <span className="score-filter">RESULTS</span>
-          <span className="score-filter">MY TEAMS</span>
+        <div className="score-filter-row" role="tablist" aria-label="Match filters">
+          {filters.map((item) => (
+            <button
+              type="button"
+              role="tab"
+              aria-selected={filter === item}
+              key={item}
+              className={filter === item ? "score-filter active" : "score-filter"}
+              onClick={() => setFilter(item)}
+            >
+              {item}
+            </button>
+          ))}
         </div>
 
         <div className="score-live-banner">
@@ -140,7 +133,7 @@ export default function HomePage() {
           <a href="/matches">Open live matches →</a>
         </div>
 
-        <HomeLiveData selectedDay={selectedDay} />
+        <HomeLiveData selectedDay={selectedDay} filter={filter} />
       </section>
 
       <section className="container score-explore">
