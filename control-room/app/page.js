@@ -389,7 +389,7 @@ export default function ControlRoomPage(){
           </div>)}
           {!competitions.length&&<p className="muted">No competitions yet.</p>}
         </div>
-      </div>
+      </div>}
       {tab==="seasons"&&<div className="stats-grid">
         <form className="panel form-stack" onSubmit={e=>{e.preventDefault();save("seasons",{competition_id:season.competition_id,name:season.name.trim(),year:season.year?Number(season.year):null,start_date:season.start_date||null,end_date:season.end_date||null},()=>setSeason({competition_id:"",name:"",year:"",start_date:"",end_date:""}));}}>
           <h2>Season registry</h2><label>Competition<select required value={season.competition_id} onChange={e=>setSeason({...season,competition_id:e.target.value})}><option value="">Select competition</option>{competitions.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
