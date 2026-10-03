@@ -1,4 +1,5 @@
 import "./globals.css";
+import PublicShell from "./PublicShell";
 
 export const metadata = {
   title: "ZEDEK SPORTS",
@@ -8,7 +9,7 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body><PublicShell>{children}</PublicShell></body>
     </html>
   );
 }
