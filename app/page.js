@@ -1,8 +1,7 @@
 'use client';
 
+import { useEffect, useMemo, useState } from "react";
 import HomeLiveData from "./HomeLiveData";
-
-import { useEffect, useState } from "react";
 
 const nav = [
   ["Matches", "/matches"],
@@ -11,9 +10,25 @@ const nav = [
   ["Statistics", "/statistics"],
 ];
 
+function dayItems() {
+  const base = new Date();
+  base.setHours(0, 0, 0, 0);
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(base);
+    d.setDate(base.getDate() + i);
+    return {
+      key: d.toISOString().slice(0, 10),
+      day: i === 0 ? "TODAY" : d.toLocaleDateString("en-GH", { weekday: "short" }).toUpperCase(),
+      date: d.toLocaleDateString("en-GH", { day: "numeric", month: "short" }),
+    };
+  });
+}
+
 export default function HomePage() {
   const [night, setNight] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [selectedDay, setSelectedDay] = useState(dayItems()[0].key);
+  const days = useMemo(() => dayItems(), []);
 
   useEffect(() => {
     setNight(localStorage.getItem("zedek-theme") === "night");
@@ -27,7 +42,7 @@ export default function HomePage() {
 
   return (
     <main className={night ? "page theme-night" : "page theme-day"}>
-      <header className="site-header">
+      <header className="site-header zedek-score-header">
         <div className="container nav">
           <a className="brand" href="/" aria-label="Zedek Sports home">
             <span className="brand-mark">Z</span><span>ZEDEK <b>SPORTS</b></span>
@@ -36,72 +51,90 @@ export default function HomePage() {
             {nav.map(([label, href]) => <a key={href} href={href}>{label}</a>)}
           </nav>
           <div className="header-actions">
-            <button className="icon-button" onClick={()=>setSearchOpen(x=>!x)} aria-label="Search Zedek Sports" title="Search">⌕</button>
+            <button className="icon-button" onClick={() => setSearchOpen(x => !x)} aria-label="Search Zedek Sports" title="Search">⌕</button>
             <button className="theme-button" onClick={toggleTheme} aria-label="Toggle day and night mode">{night ? "☀" : "☾"}</button>
           </div>
         </div>
       </header>
-      <div id="zedek-search" className={searchOpen ? "quick-search open" : "quick-search"}><form className="container quick-search-inner" action="/search" method="get"><span>⌕</span><input name="q" placeholder="Search teams, players, competitions or matches…" aria-label="Quick search" /><button type="submit">Search</button><a href="/search">Open full search →</a></form></div>
 
-      <section className="hero-shell">
-        <div className="container hero">
-          <div className="hero-copy">
-            <div className="eyebrow"><span className="live-dot" /> Ghana • Oti local football</div>
-            <h1>Football <em>where it matters.</em></h1>
-            <p>Follow the teams, matches, players and competitions that make local football matter. Official information, presented simply.</p>
-            <div className="actions">
-              <a className="button primary" href="/matches">Explore matches <span>→</span></a>
-              <a className="button" href="/teams">Find a team</a>
-            </div>
-          </div>
+      <div className={searchOpen ? "quick-search open" : "quick-search"}>
+        <form className="container quick-search-inner" action="/search" method="get">
+          <span>⌕</span>
+          <input name="q" placeholder="Search teams, players, competitions or matches…" aria-label="Quick search" />
+          <button type="submit">Search</button>
+          <a href="/search">Full search →</a>
+        </form>
+      </div>
 
-          <div className="hero-panel" aria-label="Zedek Sports football hub">
-            <div className="panel-top"><span>ZEDEK FOOTBALL HUB</span><b>OFFICIAL</b></div>
-            <div className="match-preview">
-              <div className="match-meta">LOCAL FOOTBALL • OTI</div>
-              <div className="hero-hub">
-                <div className="hero-hub-mark">Z</div>
-                <strong>Matches. Teams. Players.</strong>
-                <span>One place for verified local football information.</span>
-              </div>
-            </div>
-            <div className="panel-foot"><span>Verified information</span><a href="/matches">Open Match Centre →</a></div>
+      <section className="score-hero">
+        <div className="container score-hero-inner">
+          <div>
+            <span className="section-kicker"><i className="score-live-dot" /> OTI FOOTBALL NETWORK</span>
+            <h1>Everything local football.<br /><em>At a glance.</em></h1>
+            <p>Live scores, fixtures, results, teams and competitions — built around the football of Oti.</p>
           </div>
+          <a className="score-live-card" href="/matches">
+            <span>ZEDEK MATCH CENTRE</span>
+            <strong><i className="score-live-dot" /> LIVE &amp; UPCOMING</strong>
+            <b>Follow the game as it happens.</b>
+            <small>Open Match Centre →</small>
+          </a>
         </div>
       </section>
 
-      <HomeLiveData />
+      <section className="container score-feed">
+        <div className="score-topbar">
+          <div>
+            <span className="section-kicker">FOOTBALL</span>
+            <h2>Matches</h2>
+          </div>
+          <a href="/matches" className="score-all-link">All matches →</a>
+        </div>
 
-      <section className="container section">
-        <div className="section-heading">
-          <div><span className="section-kicker">Explore</span><h2>Your football, one place.</h2></div>
-          <a href="/matches" className="quiet-link">View all →</a>
+        <div className="score-date-strip" aria-label="Match dates">
+          {days.map(d => (
+            <button key={d.key} className={selectedDay === d.key ? "score-day active" : "score-day"} onClick={() => setSelectedDay(d.key)}>
+              <b>{d.day}</b><span>{d.date}</span>
+            </button>
+          ))}
+          <label className="score-calendar" aria-label="Choose match date">
+            <span>CAL</span>
+            <input type="date" value={selectedDay} onChange={e => setSelectedDay(e.target.value)} />
+          </label>
         </div>
-        <div className="feature-grid">
-          <a className="feature-card" href="/matches"><span className="feature-icon">●</span><div><h3>Match Centre</h3><p>Fixtures, results, lineups and live match information.</p></div><span className="arrow">↗</span></a>
-          <a className="feature-card" href="/competitions"><span className="feature-icon">◆</span><div><h3>Competitions</h3><p>Follow cups, divisions and tournaments across Oti.</p></div><span className="arrow">↗</span></a>
-          <a className="feature-card" href="/statistics"><span className="feature-icon">⌁</span><div><h3>Football Intelligence</h3><p>Standings, form, scorers, player statistics and H2H.</p></div><span className="arrow">↗</span></a>
+
+        <div className="score-filter-row">
+          <span className="score-filter active">ALL</span>
+          <span className="score-filter">LIVE</span>
+          <span className="score-filter">UPCOMING</span>
+          <span className="score-filter">RESULTS</span>
+          <span className="score-filter">MY TEAMS</span>
         </div>
+
+        <div className="score-live-banner">
+          <span><i className="score-live-dot" /> LIVE CENTRE</span>
+          <strong>Official Zedek match information</strong>
+          <a href="/matches">Open live matches →</a>
+        </div>
+
+        <HomeLiveData />
       </section>
 
-      <section className="container section split-section">
-        <div className="story-block">
-          <span className="section-kicker">Built for Oti</span>
-          <h2>Local football deserves a proper home.</h2>
-          <p>Zedek Sports brings the football people follow every weekend into one clear, reliable experience.</p>
-          <a className="text-link" href="/teams">Explore local teams →</a>
+      <section className="container score-explore">
+        <div className="score-topbar">
+          <div><span className="section-kicker">EXPLORE ZEDEK</span><h2>More football.</h2></div>
         </div>
-        <div className="quote-panel">
-          <span>01</span><strong>View</strong><small>official football information</small>
-          <strong>Follow</strong><small>the teams and competitions you care about</small>
-          <strong>Explore</strong><small>players, matches and statistics</small>
+        <div className="score-explore-grid">
+          <a href="/teams"><span>01</span><strong>Teams</strong><small>Follow local clubs and their squads.</small><b>→</b></a>
+          <a href="/competitions"><span>02</span><strong>Competitions</strong><small>Track cups, tournaments and divisions.</small><b>→</b></a>
+          <a href="/statistics"><span>03</span><strong>Statistics</strong><small>Standings, form, scorers and player data.</small><b>→</b></a>
         </div>
       </section>
 
       <footer className="site-footer">
         <div className="container footer-inner">
           <div><div className="brand footer-brand"><span className="brand-mark">Z</span><span>ZEDEK <b>SPORTS</b></span></div><p>Local football. Properly followed.</p></div>
-          <div className="footer-links"><a href="/matches">Matches</a><a href="/teams">Teams</a><a href="/competitions">Competitions</a><a href="/statistics">Statistics</a></div>
+          <div className="footer-links">{nav.map(([label, href]) => <a key={href} href={href}>{label}</a>)}</div>
         </div>
       </footer>
     </main>
