@@ -53,23 +53,30 @@ export default function HomeLiveData({ selectedDay, filter = "ALL" }) {
           ? all.filter((x) => x.scheduled_at && dateKey(x.scheduled_at) === selectedDay)
           : all;
 
-        const live = dayMatches.filter((x) => LIVE_STATUSES.has(x.status));
-        const upcoming = dayMatches.filter((x) =>
+        // Live matches are global: a match that is currently live remains visible
+        // even if its scheduled date has rolled into the previous day.
+        const live = all.filter((x) => LIVE_STATUSES.has(x.status));
+        const dayUpcoming = dayMatches.filter((x) =>
           !LIVE_STATUSES.has(x.status) &&
           !FINISHED_STATUSES.has(x.status) &&
           new Date(x.scheduled_at).getTime() >= now
         );
-        const results = dayMatches
+        const dayResults = dayMatches
           .filter((x) => official.has(x.id) && FINISHED_STATUSES.has(x.status))
           .sort((a, b) => new Date(b.scheduled_at).getTime() - new Date(a.scheduled_at).getTime());
 
         let visible;
         if (filter === "LIVE") visible = live;
-        else if (filter === "UPCOMING") visible = upcoming;
-        else if (filter === "RESULTS") visible = results;
+        else if (filter === "UPCOMING") visible = dayUpcoming;
+        else if (filter === "RESULTS") visible = dayResults;
         else if (filter === "MY TEAMS") visible = [];
-        else visible = [...live, ...upcoming, ...results].sort(
-          (a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime()
+        else visible = [...live, ...dayUpcoming, ...dayResults].sort(
+          (a, b) => {
+            if (LIVE_STATUSES.has(a.status) !== LIVE_STATUSES.has(b.status)) {
+              return LIVE_STATUSES.has(a.status) ? -1 : 1;
+            }
+            return new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime();
+          }
         );
 
         if (!cancelled) {
@@ -89,7 +96,8 @@ export default function HomeLiveData({ selectedDay, filter = "ALL" }) {
     }
 
     load();
-    return () => { cancelled = true; };
+    const refreshTimer = setInterval(load, 5000);
+    return () => { cancelled = true; clearInterval(refreshTimer); };
   }, [selectedDay, filter]);
 
   const liveCount = state.matches.filter((m) => LIVE_STATUSES.has(m.status)).length;
