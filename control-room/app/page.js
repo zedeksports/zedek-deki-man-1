@@ -246,7 +246,7 @@ export default function ControlRoomPage(){
     const m=await matchQuery;
     if(m.error){setError(m.error.message);return;}
     const ids=(m.data||[]).map(x=>x.id);
-    const e=ids.length?await supabase.from("match_events").select("match_id,team_id,player_id,event_type,players(full_name,shirt_number),teams(name)").in("match_id",ids).in("event_type",["goal","own_goal","yellow_card","red_card"]):{data:[],error:null};
+    const e=ids.length?await supabase.from("match_events").select("match_id,team_id,player_id,event_type,player:players!match_events_player_id_fkey(full_name,shirt_number),teams(name)").in("match_id",ids).in("event_type",["goal","own_goal","yellow_card","red_card"]):{data:[],error:null};
     if(e.error){setError(e.error.message);return;}
     const map={}; const ensure=(id,name)=>{if(!id)return null;if(!map[id])map[id]={team_id:id,team:name||"Unknown",played:0,wins:0,draws:0,losses:0,gf:0,ga:0,gd:0,points:0};return map[id];};
     (m.data||[]).forEach(x=>{const h=ensure(x.home_team_id,x.home?.name),a=ensure(x.away_team_id,x.away?.name);if(!h||!a)return;h.played++;a.played++;h.gf+=x.home_score||0;h.ga+=x.away_score||0;a.gf+=x.away_score||0;a.ga+=x.home_score||0;if((x.home_score||0)>(x.away_score||0)){h.wins++;h.points+=3;a.losses++;}else if((x.home_score||0)<(x.away_score||0)){a.wins++;a.points+=3;h.losses++;}else{h.draws++;a.draws++;h.points++;a.points++;}});
