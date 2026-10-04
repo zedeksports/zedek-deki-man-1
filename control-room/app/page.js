@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "../lib/supabase/browser";
 
-const TABS=["overview","competitions","seasons","stages","fixtures","live","lineups","review","stats","teams","players","coaches"];
+const TABS=["overview","competitions","seasons","stages","fixtures","live","lineups","review","stats","community","teams","players","coaches"];
 const STAGE_TYPES=["league","group","knockout","quarter_final","semi_final","final"];
 
 function getSupabase(){if(typeof window==="undefined")return null;return createSupabaseBrowserClient();}
@@ -21,23 +21,43 @@ export default function ControlRoomPage(){
   const [player,setPlayer]=useState({id:"",team_id:"",full_name:"",shirt_number:"",position:"",image:null});
   const [coach,setCoach]=useState({team_id:"",full_name:"",date_of_birth:"",nationality:"",role:"Head Coach",image:null}); const [editingTeamId,setEditingTeamId]=useState(""); const [editingPlayerId,setEditingPlayerId]=useState("");
   const [saving,setSaving]=useState(false),[statsCompetitionId,setStatsCompetitionId]=useState(""),[statsSeasonId,setStatsSeasonId]=useState(""),[officialStats,setOfficialStats]=useState([]),[statsData,setStatsData]=useState({standings:[],scorers:[],recent:[],form:[]}),[h2hHome,setH2hHome]=useState(""),[h2hAway,setH2hAway]=useState(""),[h2hData,setH2hData]=useState([]),[h2hSummary,setH2hSummary]=useState(null), [reportMatch,setReportMatch]=useState(null), [report,setReport]=useState(null), [reports,setReports]=useState([]),[liveMatch,setLiveMatch]=useState(null),[events,setEvents]=useState([]),[matchStats,setMatchStats]=useState(null),[clock,setClock]=useState(0),[eventForm,setEventForm]=useState({type:"goal",team_id:"",player_id:"",secondary_player_id:"",minute:"",extra_minute:"",details:""}),[lineupMatch,setLineupMatch]=useState(null),[lineupTeam,setLineupTeam]=useState(""),[lineup,setLineup]=useState(null),[lineupPlayers,setLineupPlayers]=useState([]),[lineupLoading,setLineupLoading]=useState(false);
+  const [contentPosts,setContentPosts]=useState([]),[editingContentId,setEditingContentId]=useState("");
+  const [contentForm,setContentForm]=useState({content_type:"news",title:"",slug:"",excerpt:"",body:"",category:"",status:"draft",featured:false,cover_image_url:""});
+  const [surveys,setSurveys]=useState([]),[surveyQuestions,setSurveyQuestions]=useState([]),[surveyResponses,setSurveyResponses]=useState([]);
+  const [surveyForm,setSurveyForm]=useState({title:"",description:"",status:"draft",starts_at:"",ends_at:""}),[editingSurveyId,setEditingSurveyId]=useState("");
+  const [questionForm,setQuestionForm]=useState({survey_id:"",prompt:"",question_type:"text",options:"",required:false,sort_order:"1"});
+  const [feedbackRows,setFeedbackRows]=useState([]),[feedbackFilter,setFeedbackFilter]=useState("new");
+  const [sponsors,setSponsors]=useState([]),[editingSponsorId,setEditingSponsorId]=useState(""),[sponsorForm,setSponsorForm]=useState({name:"",logo_url:"",website_url:"",contact_name:"",contact_email:"",contact_phone:"",tier:"standard",status:"prospect",start_date:"",end_date:"",notes:""});
+  const [deals,setDeals]=useState([]),[dealForm,setDealForm]=useState({sponsor_id:"",deal_name:"",amount:"",currency:"GHS",status:"proposed",start_date:"",end_date:"",placement:"",notes:""});
+  const [ads,setAds]=useState([]),[adForm,setAdForm]=useState({name:"",placement:"homepage",format:"banner",sponsor_id:"",image_url:"",target_url:"",active:false,start_date:"",end_date:""}),[editingAdId,setEditingAdId]=useState("");
+  const [transactions,setTransactions]=useState([]),[transactionForm,setTransactionForm]=useState({sponsor_id:"",deal_id:"",transaction_type:"payment",amount:"",currency:"GHS",status:"pending",transaction_date:new Date().toISOString().slice(0,10),reference:"",notes:""});
 
   useEffect(()=>{if(!liveMatch)return;const tick=()=>setClock(elapsed(liveMatch));tick();const id=setInterval(tick,1000);return()=>clearInterval(id);},[liveMatch]);
 
   async function refresh(){
     setError(""); const supabase=getSupabase(); if(!supabase)return;
-    const [a,b,c,d,coachRows,e,f]=await Promise.all([
+    const [a,b,c,d,coachRows,e,f,contentRows,surveyRows,questionRows,feedbackResult,sponsorRows,dealRows,adRows,transactionRows]=await Promise.all([
       supabase.from("competitions").select("*").order("name"),
       supabase.from("seasons").select("*, competitions(name)").order("created_at",{ascending:false}),
       supabase.from("teams").select("*").order("name"),
       supabase.from("players").select("*, teams(name)").order("full_name"),
       supabase.from("coaches").select("*, team_coaches(team_id,is_current,teams(name))").order("full_name"),
       supabase.from("stages").select("*, seasons(name, competitions(name))").order("season_id").order("stage_order"),
-      supabase.from("matches").select("*, home:teams!matches_home_team_id_fkey(name), away:teams!matches_away_team_id_fkey(name), seasons(name), stages(name)").order("scheduled_at",{ascending:true})
+      supabase.from("matches").select("*, home:teams!matches_home_team_id_fkey(name), away:teams!matches_away_team_id_fkey(name), seasons(name), stages(name)").order("scheduled_at",{ascending:true}),
+      supabase.from("content_posts").select("*").order("created_at",{ascending:false}),
+      supabase.from("surveys").select("*").order("created_at",{ascending:false}),
+      supabase.from("survey_questions").select("*").order("sort_order"),
+      supabase.from("user_feedback").select("*").order("created_at",{ascending:false}),
+      supabase.from("sponsors").select("*").order("created_at",{ascending:false}),
+      supabase.from("sponsorship_deals").select("*, sponsors(name)").order("created_at",{ascending:false}),
+      supabase.from("ad_slots").select("*, sponsors(name)").order("created_at",{ascending:false}),
+      supabase.from("monetization_transactions").select("*, sponsors(name), sponsorship_deals(deal_name)").order("transaction_date",{ascending:false}).order("created_at",{ascending:false})
     ]);
-    const bad=[a,b,c,d,coachRows,e,f].find(x=>x.error); if(bad){setError(bad.error.message);return;}
+    const bad=[a,b,c,d,coachRows,e,f,contentRows,surveyRows,questionRows,feedbackResult,sponsorRows,dealRows,adRows,transactionRows].find(x=>x.error); if(bad){setError(bad.error.message);return;}
     setCompetitions(a.data||[]);setSeasons(b.data||[]);setTeams(c.data||[]);setPlayers(d.data||[]);setCoaches(coachRows.data||[]);
     setStages(e.data||[]);setMatches(f.data||[]);
+    setContentPosts(contentRows.data||[]);setSurveys(surveyRows.data||[]);setSurveyQuestions(questionRows.data||[]);setFeedbackRows(feedbackResult.data||[]);
+    setSponsors(sponsorRows.data||[]);setDeals(dealRows.data||[]);setAds(adRows.data||[]);setTransactions(transactionRows.data||[]);
   }
 
   useEffect(()=>{let mounted=true;
@@ -344,6 +364,51 @@ export default function ControlRoomPage(){
     const result=await supabase.from("matches").update(values).eq("id",id);setSaving(false);
     if(result.error){setError(result.error.message);return;}setNotice("Fixture updated.");await refresh();
   }
+  function slugify(value){return value.toLowerCase().trim().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"");}
+  async function saveContent(e){
+    e.preventDefault();setSaving(true);setError("");setNotice("");const supabase=getSupabase();
+    const values={content_type:contentForm.content_type,title:contentForm.title.trim(),slug:(contentForm.slug.trim()||slugify(contentForm.title))+(editingContentId?"":"-"+Date.now()),excerpt:contentForm.excerpt.trim()||null,body:contentForm.body,category:contentForm.category.trim()||null,status:contentForm.status,featured:!!contentForm.featured,cover_image_url:contentForm.cover_image_url.trim()||null,author_id:user?.id||null,published_at:contentForm.status==="published"?new Date().toISOString():null,updated_at:new Date().toISOString()};
+    const r=editingContentId?await supabase.from("content_posts").update(values).eq("id",editingContentId):await supabase.from("content_posts").insert(values);
+    setSaving(false);if(r.error){setError(r.error.message);return;}setEditingContentId("");setContentForm({content_type:"news",title:"",slug:"",excerpt:"",body:"",category:"",status:"draft",featured:false,cover_image_url:""});setNotice("Content saved.");await refresh();
+  }
+  async function saveSurvey(e){
+    e.preventDefault();setSaving(true);setError("");setNotice("");const supabase=getSupabase();
+    const values={title:surveyForm.title.trim(),description:surveyForm.description.trim()||null,status:surveyForm.status,starts_at:surveyForm.starts_at||null,ends_at:surveyForm.ends_at||null,created_by:user?.id||null,updated_at:new Date().toISOString()};
+    const r=editingSurveyId?await supabase.from("surveys").update(values).eq("id",editingSurveyId):await supabase.from("surveys").insert(values);
+    setSaving(false);if(r.error){setError(r.error.message);return;}setEditingSurveyId("");setSurveyForm({title:"",description:"",status:"draft",starts_at:"",ends_at:""});setNotice("Survey saved.");await refresh();
+  }
+  async function saveQuestion(e){
+    e.preventDefault();setSaving(true);setError("");setNotice("");const supabase=getSupabase();
+    const options=questionForm.options.split(",").map(x=>x.trim()).filter(Boolean);
+    const r=await supabase.from("survey_questions").insert({survey_id:questionForm.survey_id,prompt:questionForm.prompt.trim(),question_type:questionForm.question_type,options,required:!!questionForm.required,sort_order:Number(questionForm.sort_order)||1});
+    setSaving(false);if(r.error){setError(r.error.message);return;}setQuestionForm({survey_id:questionForm.survey_id,prompt:"",question_type:"text",options:"",required:false,sort_order:String((surveyQuestions.filter(x=>x.survey_id===questionForm.survey_id).length||0)+2)});setNotice("Survey question added.");await refresh();
+  }
+  async function updateFeedback(row,status){
+    const supabase=getSupabase();setSaving(true);setError("");const values={status,admin_note:row.admin_note||null,resolved_at:status==="resolved"?new Date().toISOString():null};
+    const r=await supabase.from("user_feedback").update(values).eq("id",row.id);setSaving(false);if(r.error){setError(r.error.message);return;}setNotice("Feedback updated.");await refresh();
+  }
+  async function saveSponsor(e){
+    e.preventDefault();setSaving(true);setError("");setNotice("");const supabase=getSupabase();
+    const values={...sponsorForm,name:sponsorForm.name.trim(),logo_url:sponsorForm.logo_url.trim()||null,website_url:sponsorForm.website_url.trim()||null,contact_name:sponsorForm.contact_name.trim()||null,contact_email:sponsorForm.contact_email.trim()||null,contact_phone:sponsorForm.contact_phone.trim()||null,start_date:sponsorForm.start_date||null,end_date:sponsorForm.end_date||null,notes:sponsorForm.notes.trim()||null,updated_at:new Date().toISOString()};
+    const r=editingSponsorId?await supabase.from("sponsors").update(values).eq("id",editingSponsorId):await supabase.from("sponsors").insert(values);
+    setSaving(false);if(r.error){setError(r.error.message);return;}setEditingSponsorId("");setSponsorForm({name:"",logo_url:"",website_url:"",contact_name:"",contact_email:"",contact_phone:"",tier:"standard",status:"prospect",start_date:"",end_date:"",notes:""});setNotice("Sponsor saved.");await refresh();
+  }
+  async function saveDeal(e){
+    e.preventDefault();setSaving(true);setError("");setNotice("");const supabase=getSupabase();
+    const r=await supabase.from("sponsorship_deals").insert({sponsor_id:dealForm.sponsor_id,deal_name:dealForm.deal_name.trim(),amount:Number(dealForm.amount)||0,currency:dealForm.currency.trim()||"GHS",status:dealForm.status,start_date:dealForm.start_date||null,end_date:dealForm.end_date||null,placement:dealForm.placement.trim()||null,notes:dealForm.notes.trim()||null});
+    setSaving(false);if(r.error){setError(r.error.message);return;}setDealForm({sponsor_id:"",deal_name:"",amount:"",currency:"GHS",status:"proposed",start_date:"",end_date:"",placement:"",notes:""});setNotice("Sponsorship deal saved.");await refresh();
+  }
+  async function saveAd(e){
+    e.preventDefault();setSaving(true);setError("");setNotice("");const supabase=getSupabase();
+    const values={...adForm,name:adForm.name.trim(),image_url:adForm.image_url.trim()||null,target_url:adForm.target_url.trim()||null,sponsor_id:adForm.sponsor_id||null,start_date:adForm.start_date||null,end_date:adForm.end_date||null,updated_at:new Date().toISOString()};
+    const r=editingAdId?await supabase.from("ad_slots").update(values).eq("id",editingAdId):await supabase.from("ad_slots").insert(values);
+    setSaving(false);if(r.error){setError(r.error.message);return;}setEditingAdId("");setAdForm({name:"",placement:"homepage",format:"banner",sponsor_id:"",image_url:"",target_url:"",active:false,start_date:"",end_date:""});setNotice("Ad slot saved.");await refresh();
+  }
+  async function saveTransaction(e){
+    e.preventDefault();setSaving(true);setError("");setNotice("");const supabase=getSupabase();
+    const r=await supabase.from("monetization_transactions").insert({sponsor_id:transactionForm.sponsor_id||null,deal_id:transactionForm.deal_id||null,transaction_type:transactionForm.transaction_type,amount:Number(transactionForm.amount)||0,currency:transactionForm.currency.trim()||"GHS",status:transactionForm.status,transaction_date:transactionForm.transaction_date,reference:transactionForm.reference.trim()||null,notes:transactionForm.notes.trim()||null});
+    setSaving(false);if(r.error){setError(r.error.message);return;}setTransactionForm({sponsor_id:"",deal_id:"",transaction_type:"payment",amount:"",currency:"GHS",status:"pending",transaction_date:new Date().toISOString().slice(0,10),reference:"",notes:""});setNotice("Revenue transaction saved.");await refresh();
+  }
   async function signOut(){const supabase=getSupabase();if(supabase)await supabase.auth.signOut();window.location.href="/login";}
 
   if(loading)return <main className="auth-page"><div className="panel">Loading ZEDEK Sports Control Room...</div></main>;
@@ -539,6 +604,111 @@ export default function ControlRoomPage(){
     </div>)}{!reports.length&&<p className="muted">No reports in the queue.</p>}</div>
   </div>
 </div>}
+{tab==="community"&&<div className="form-stack">
+  <div className="panel">
+    <h2>Football News & Community Updates</h2>
+    <p className="muted">Publish official Zedek Sports stories and local football community updates to the public site.</p>
+    <form className="form-stack" onSubmit={saveContent}>
+      <div className="stats-grid">
+        <label>Type<select value={contentForm.content_type} onChange={e=>setContentForm({...contentForm,content_type:e.target.value})}><option value="news">Football News</option><option value="community_update">Community Update</option></select></label>
+        <label>Status<select value={contentForm.status} onChange={e=>setContentForm({...contentForm,status:e.target.value})}><option value="draft">Draft</option><option value="published">Published</option><option value="archived">Archived</option></select></label>
+      </div>
+      <label>Title<input required value={contentForm.title} onChange={e=>setContentForm({...contentForm,title:e.target.value})}/></label>
+      <label>Slug<input value={contentForm.slug} onChange={e=>setContentForm({...contentForm,slug:e.target.value})}/></label>
+      <label>Category<input placeholder="Match report, transfer, community..." value={contentForm.category} onChange={e=>setContentForm({...contentForm,category:e.target.value})}/></label>
+      <label>Excerpt<textarea rows="3" value={contentForm.excerpt} onChange={e=>setContentForm({...contentForm,excerpt:e.target.value})}/></label>
+      <label>Story / update body<textarea required rows="9" value={contentForm.body} onChange={e=>setContentForm({...contentForm,body:e.target.value})}/></label>
+      <label>Cover image URL<input value={contentForm.cover_image_url} onChange={e=>setContentForm({...contentForm,cover_image_url:e.target.value})}/></label>
+      <label style={{display:"flex",gap:8,alignItems:"center"}}><input type="checkbox" checked={contentForm.featured} onChange={e=>setContentForm({...contentForm,featured:e.target.checked})}/> Featured</label>
+      <button className="button primary" disabled={saving}>{editingContentId?"Update content":"Save content"}</button>
+      {editingContentId&&<button type="button" className="button" onClick={()=>{setEditingContentId("");setContentForm({content_type:"news",title:"",slug:"",excerpt:"",body:"",category:"",status:"draft",featured:false,cover_image_url:""});}}>Cancel edit</button>}
+    </form>
+    <div className="form-stack" style={{marginTop:18}}>{contentPosts.map(x=><div className="status-card" key={x.id}><b>{x.title}</b><span>{x.content_type==="news"?"NEWS":"COMMUNITY"} · {x.status} · {x.featured?"Featured":"Standard"}</span><p>{x.excerpt||x.body.slice(0,180)}</p><div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="button" onClick={()=>{setEditingContentId(x.id);setContentForm({content_type:x.content_type,title:x.title||"",slug:x.slug||"",excerpt:x.excerpt||"",body:x.body||"",category:x.category||"",status:x.status||"draft",featured:!!x.featured,cover_image_url:x.cover_image_url||""});}}>Edit</button>{x.status!=="archived"&&<button className="button danger" onClick={async()=>{const supabase=getSupabase();setSaving(true);const r=await supabase.from("content_posts").update({status:"archived",updated_at:new Date().toISOString()}).eq("id",x.id);setSaving(false);if(r.error)setError(r.error.message);else{setNotice("Content archived.");await refresh();}}}>Archive</button>}</div></div>)}{!contentPosts.length&&<p className="muted">No content yet.</p>}</div>
+  </div>
+
+  <div className="stats-grid">
+    <div className="panel">
+      <h2>User Feedback</h2>
+      <label>Filter<select value={feedbackFilter} onChange={e=>setFeedbackFilter(e.target.value)}><option value="new">New</option><option value="reviewing">Reviewing</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select></label>
+      <div className="form-stack" style={{marginTop:12}}>{feedbackRows.filter(x=>x.status===feedbackFilter).map(x=><div className="status-card" key={x.id}><b>{x.subject||"Feedback"}</b><span>{x.category} · {x.rating?x.rating+"/5":"No rating"} · {new Date(x.created_at).toLocaleString()}</span><p>{x.message}</p><textarea rows="2" placeholder="Admin note" value={x.admin_note||""} onChange={e=>setFeedbackRows(feedbackRows.map(y=>y.id===x.id?{...y,admin_note:e.target.value}:y))}/><div style={{display:"flex",gap:8}}><button className="button" onClick={()=>updateFeedback(x,"reviewing")}>Review</button><button className="button primary" onClick={()=>updateFeedback(x,"resolved")}>Resolve</button><button className="button" onClick={()=>updateFeedback(x,"closed")}>Close</button></div></div>)}{!feedbackRows.filter(x=>x.status===feedbackFilter).length&&<p className="muted">No feedback in this queue.</p>}</div>
+    </div>
+    <div className="panel">
+      <h2>Survey Manager</h2>
+      <form className="form-stack" onSubmit={saveSurvey}>
+        <label>Survey title<input required value={surveyForm.title} onChange={e=>setSurveyForm({...surveyForm,title:e.target.value})}/></label>
+        <label>Description<textarea rows="3" value={surveyForm.description} onChange={e=>setSurveyForm({...surveyForm,description:e.target.value})}/></label>
+        <label>Status<select value={surveyForm.status} onChange={e=>setSurveyForm({...surveyForm,status:e.target.value})}><option value="draft">Draft</option><option value="published">Published</option><option value="closed">Closed</option></select></label>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}><label>Starts<input type="datetime-local" value={surveyForm.starts_at} onChange={e=>setSurveyForm({...surveyForm,starts_at:e.target.value})}/></label><label>Ends<input type="datetime-local" value={surveyForm.ends_at} onChange={e=>setSurveyForm({...surveyForm,ends_at:e.target.value})}/></label></div>
+        <button className="button primary" disabled={saving}>{editingSurveyId?"Update survey":"Create survey"}</button>
+      </form>
+      <div className="form-stack" style={{marginTop:12}}>{surveys.map(x=><div className="status-card" key={x.id}><b>{x.title}</b><span>{x.status} · {surveyQuestions.filter(q=>q.survey_id===x.id).length} questions</span><div style={{display:"flex",gap:8}}><button className="button" onClick={()=>{setEditingSurveyId(x.id);setSurveyForm({title:x.title||"",description:x.description||"",status:x.status||"draft",starts_at:x.starts_at?new Date(x.starts_at).toISOString().slice(0,16):"",ends_at:x.ends_at?new Date(x.ends_at).toISOString().slice(0,16):""});}}>Edit</button></div></div>)}</div>
+    </div>
+  </div>
+
+  <div className="panel">
+    <h2>Survey Questions</h2>
+    <form className="form-stack" onSubmit={saveQuestion}>
+      <label>Survey<select required value={questionForm.survey_id} onChange={e=>setQuestionForm({...questionForm,survey_id:e.target.value})}><option value="">Select survey</option>{surveys.map(x=><option key={x.id} value={x.id}>{x.title}</option>)}</select></label>
+      <label>Question<input required value={questionForm.prompt} onChange={e=>setQuestionForm({...questionForm,prompt:e.target.value})}/></label>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}><label>Type<select value={questionForm.question_type} onChange={e=>setQuestionForm({...questionForm,question_type:e.target.value})}><option value="text">Text</option><option value="single">Single choice</option><option value="multi">Multiple choice</option><option value="rating">Rating</option></select></label><label>Order<input type="number" min="1" value={questionForm.sort_order} onChange={e=>setQuestionForm({...questionForm,sort_order:e.target.value})}/></label></div>
+      <label>Options (comma separated)<input value={questionForm.options} onChange={e=>setQuestionForm({...questionForm,options:e.target.value})}/></label>
+      <label style={{display:"flex",gap:8,alignItems:"center"}}><input type="checkbox" checked={questionForm.required} onChange={e=>setQuestionForm({...questionForm,required:e.target.checked})}/> Required</label>
+      <button className="button primary" disabled={saving}>Add question</button>
+    </form>
+  </div>
+
+  <div className="panel">
+    <h2>Sponsors, Advertising & Monetization</h2>
+    <div className="stats-grid">
+      <form className="form-stack">
+        <h3>Sponsor</h3>
+        <label>Name<input required value={sponsorForm.name} onChange={e=>setSponsorForm({...sponsorForm,name:e.target.value})}/></label>
+        <label>Logo URL<input value={sponsorForm.logo_url} onChange={e=>setSponsorForm({...sponsorForm,logo_url:e.target.value})}/></label>
+        <label>Website<input value={sponsorForm.website_url} onChange={e=>setSponsorForm({...sponsorForm,website_url:e.target.value})}/></label>
+        <label>Contact name<input value={sponsorForm.contact_name} onChange={e=>setSponsorForm({...sponsorForm,contact_name:e.target.value})}/></label>
+        <label>Contact email<input type="email" value={sponsorForm.contact_email} onChange={e=>setSponsorForm({...sponsorForm,contact_email:e.target.value})}/></label>
+        <label>Tier<select value={sponsorForm.tier} onChange={e=>setSponsorForm({...sponsorForm,tier:e.target.value})}><option value="community">Community</option><option value="standard">Standard</option><option value="premium">Premium</option><option value="title">Title</option></select></label>
+        <label>Status<select value={sponsorForm.status} onChange={e=>setSponsorForm({...sponsorForm,status:e.target.value})}><option value="prospect">Prospect</option><option value="active">Active</option><option value="paused">Paused</option><option value="ended">Ended</option></select></label>
+        <button className="button primary" disabled={saving} onClick={saveSponsor}>{editingSponsorId?"Update sponsor":"Add sponsor"}</button>
+      </form>
+      <form className="form-stack" onSubmit={saveDeal}>
+        <h3>Sponsorship Deal</h3>
+        <label>Sponsor<select required value={dealForm.sponsor_id} onChange={e=>setDealForm({...dealForm,sponsor_id:e.target.value})}><option value="">Select sponsor</option>{sponsors.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+        <label>Deal name<input required value={dealForm.deal_name} onChange={e=>setDealForm({...dealForm,deal_name:e.target.value})}/></label>
+        <label>Amount<input type="number" min="0" step="0.01" value={dealForm.amount} onChange={e=>setDealForm({...dealForm,amount:e.target.value})}/></label>
+        <label>Placement<input placeholder="Homepage, competition, tournament..." value={dealForm.placement} onChange={e=>setDealForm({...dealForm,placement:e.target.value})}/></label>
+        <label>Status<select value={dealForm.status} onChange={e=>setDealForm({...dealForm,status:e.target.value})}><option value="proposed">Proposed</option><option value="active">Active</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select></label>
+        <button className="button primary" disabled={saving}>Save deal</button>
+      </form>
+      <form className="form-stack" onSubmit={saveAd}>
+        <h3>Ad Slot</h3>
+        <label>Name<input required value={adForm.name} onChange={e=>setAdForm({...adForm,name:e.target.value})}/></label>
+        <label>Placement<input value={adForm.placement} onChange={e=>setAdForm({...adForm,placement:e.target.value})}/></label>
+        <label>Format<select value={adForm.format} onChange={e=>setAdForm({...adForm,format:e.target.value})}><option value="banner">Banner</option><option value="card">Card</option><option value="logo">Logo</option><option value="native">Native</option></select></label>
+        <label>Sponsor<select value={adForm.sponsor_id} onChange={e=>setAdForm({...adForm,sponsor_id:e.target.value})}><option value="">None</option>{sponsors.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+        <label>Image URL<input value={adForm.image_url} onChange={e=>setAdForm({...adForm,image_url:e.target.value})}/></label>
+        <label>Target URL<input value={adForm.target_url} onChange={e=>setAdForm({...adForm,target_url:e.target.value})}/></label>
+        <label style={{display:"flex",gap:8,alignItems:"center"}}><input type="checkbox" checked={adForm.active} onChange={e=>setAdForm({...adForm,active:e.target.checked})}/> Active</label>
+        <button className="button primary" disabled={saving}>{editingAdId?"Update ad slot":"Add ad slot"}</button>
+      </form>
+      <form className="form-stack" onSubmit={saveTransaction}>
+        <h3>Revenue Ledger</h3>
+        <label>Sponsor<select value={transactionForm.sponsor_id} onChange={e=>setTransactionForm({...transactionForm,sponsor_id:e.target.value})}><option value="">None</option>{sponsors.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+        <label>Deal<select value={transactionForm.deal_id} onChange={e=>setTransactionForm({...transactionForm,deal_id:e.target.value})}><option value="">None</option>{deals.map(x=><option key={x.id} value={x.id}>{x.deal_name}</option>)}</select></label>
+        <label>Type<select value={transactionForm.transaction_type} onChange={e=>setTransactionForm({...transactionForm,transaction_type:e.target.value})}><option value="payment">Payment</option><option value="invoice">Invoice</option><option value="refund">Refund</option><option value="adjustment">Adjustment</option></select></label>
+        <label>Amount<input required type="number" step="0.01" value={transactionForm.amount} onChange={e=>setTransactionForm({...transactionForm,amount:e.target.value})}/></label>
+        <label>Date<input type="date" value={transactionForm.transaction_date} onChange={e=>setTransactionForm({...transactionForm,transaction_date:e.target.value})}/></label>
+        <label>Reference<input value={transactionForm.reference} onChange={e=>setTransactionForm({...transactionForm,reference:e.target.value})}/></label>
+        <button className="button primary" disabled={saving}>Record transaction</button>
+      </form>
+    </div>
+    <div className="form-stack" style={{marginTop:16}}>
+      <h3>Active Sponsors</h3>{sponsors.map(x=><div className="status-card" key={x.id}><b>{x.name}</b><span>{x.tier} · {x.status} · {x.website_url||"No website"}</span><button className="button" onClick={()=>{setEditingSponsorId(x.id);setSponsorForm({name:x.name||"",logo_url:x.logo_url||"",website_url:x.website_url||"",contact_name:x.contact_name||"",contact_email:x.contact_email||"",contact_phone:x.contact_phone||"",tier:x.tier||"standard",status:x.status||"prospect",start_date:x.start_date||"",end_date:x.end_date||"",notes:x.notes||""});}}>Edit</button></div>)}
+      <h3>Recent Revenue</h3>{transactions.slice(0,20).map(x=><div className="status-card" key={x.id}><b>{x.transaction_type.toUpperCase()} · {x.currency} {Number(x.amount).toFixed(2)}</b><span>{x.sponsors?.name||"Unassigned sponsor"} · {x.status} · {x.transaction_date}</span></div>)}{!transactions.length&&<p className="muted">No transactions yet.</p>}
+    </div>
+  </div>
+</div>
+
 {tab==="teams"&&<div className="stats-grid">
         <form className="panel form-stack" onSubmit={saveTeam}>
           <h2>{editingTeamId?"Edit team":"Team registry"}</h2><label>Team name<input required value={team.name} onChange={e=>setTeam({...team,name:e.target.value})}/></label><label>Short name<input value={team.short_name} onChange={e=>setTeam({...team,short_name:e.target.value})}/></label><label>Area<input value={team.area} onChange={e=>setTeam({...team,area:e.target.value})}/></label><label>Home venue<input value={team.home_venue} onChange={e=>setTeam({...team,home_venue:e.target.value})}/></label><label>Team logo<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={e=>setTeam({...team,image:e.target.files?.[0]||null})}/></label>{team.image&&<span className="muted">Selected: {team.image.name}</span>}<button className="button primary" disabled={saving}>{saving?"Saving…":editingTeamId?"Save team changes":"Register team"}</button><button type="button" className="button" disabled={saving} onClick={()=>{setEditingTeamId("");setTeam({id:"",name:"",short_name:"",area:"",home_venue:"",image:null});}}>Cancel</button>
