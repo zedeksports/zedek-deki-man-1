@@ -135,3 +135,12 @@ drop policy if exists "admins manage monetization transactions" on public.moneti
 create policy "admins manage monetization transactions" on public.monetization_transactions for all to authenticated using ((select private.is_admin())) with check ((select private.is_admin()));
 revoke all on public.sponsorship_deals from anon;
 revoke all on public.monetization_transactions from anon;
+
+revoke all on table public.content_posts,public.surveys,public.survey_questions,public.survey_responses,public.user_feedback,public.sponsors,public.sponsorship_deals,public.ad_slots,public.monetization_transactions from anon,authenticated;
+grant select on public.content_posts,public.surveys,public.survey_questions,public.ad_slots to anon;
+grant select,insert,update,delete on public.content_posts,public.surveys,public.survey_questions,public.survey_responses,public.user_feedback,public.sponsors,public.sponsorship_deals,public.ad_slots,public.monetization_transactions to authenticated;
+drop policy if exists "public read active sponsors" on public.sponsors;
+create or replace view public.active_sponsors with (security_invoker=false) as
+select id,name,logo_url,website_url,tier,status,start_date,end_date from public.sponsors where status='active';
+revoke all on public.active_sponsors from public;
+grant select on public.active_sponsors to anon,authenticated;
