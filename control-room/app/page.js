@@ -666,7 +666,7 @@ export default function ControlRoomPage(){
       <div className="card"><h2>{transactions.filter(x=>x.status==="pending").length}</h2><p>Pending Transactions</p></div>
     </div>
     <div className="stats-grid">
-      <form className="form-stack">
+      <form className="form-stack" onSubmit={saveSponsor}>
         <h3>Sponsor</h3>
         <label>Name<input required value={sponsorForm.name} onChange={e=>setSponsorForm({...sponsorForm,name:e.target.value})}/></label>
         <label>Logo URL<input value={sponsorForm.logo_url} onChange={e=>setSponsorForm({...sponsorForm,logo_url:e.target.value})}/></label>
