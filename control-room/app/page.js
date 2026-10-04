@@ -220,62 +220,21 @@ export default function ControlRoomPage(){
     const supabase=getSupabase(); if(!supabase)return;
     setSaving(true); setError(""); setNotice("");
     try{
-      let q=supabase.from("matches").select("id,season_id,home_team_id,away_team_id").eq("status","verified");
-      if(statsSeasonId) q=q.eq("season_id",statsSeasonId);
-      else if(statsCompetitionId){
-        const seasonIds=seasons.filter(x=>x.competition_id===statsCompetitionId).map(x=>x.id);
-        if(!seasonIds.length){setNotice("No seasons are registered for this competition yet.");return;}
-        q=q.in("season_id",seasonIds);
-      }
-      const matchesResult=await q;
-      if(matchesResult.error)throw matchesResult.error;
-      const matches=matchesResult.data||[];
-      const matchIds=matches.map(x=>x.id);
-      if(!matchIds.length){setNotice("No verified matches are available for this scope.");return;}
-      const ver=await supabase.from("match_verifications").select("match_id,official_result").in("match_id",matchIds).eq("official_result",true);
-      if(ver.error)throw ver.error;
-      const officialIds=(ver.data||[]).map(x=>x.match_id);
-      const officialMatches=matches.filter(x=>officialIds.includes(x.id));
-      if(!officialMatches.length){setNotice("No officially verified results are available for this scope.");return;}
-      const lineups=await supabase.from("match_lineups").select("id,match_id,team_id").in("match_id",officialMatches.map(x=>x.id));
-      if(lineups.error)throw lineups.error;
-      const lineupIds=(lineups.data||[]).map(x=>x.id);
-      const lp=lineupIds.length?await supabase.from("match_lineup_players").select("lineup_id,player_id,role").in("lineup_id",lineupIds):{data:[],error:null};
-      if(lp.error)throw lp.error;
-      const ev=await supabase.from("match_events").select("match_id,team_id,player_id,secondary_player_id,event_type").in("match_id",officialMatches.map(x=>x.id));
-      if(ev.error)throw ev.error;
-      const lineupById={}; (lineups.data||[]).forEach(x=>{lineupById[x.id]=x;});
-      const aggregate={};
-      const touch=(seasonId,playerId,teamId)=>{if(!playerId||!seasonId||!teamId)return null;const key=seasonId+"|"+playerId+"|"+teamId;if(!aggregate[key])aggregate[key]={season_id:seasonId,player_id:playerId,team_id:teamId,matches_played:0,starts:0,goals:0,assists:0,yellow_cards:0,red_cards:0,minutes_played:0};return aggregate[key];};
-      const matchSeason={}; officialMatches.forEach(x=>{matchSeason[x.id]=x.season_id;});
-      const participation={};
-      (lp.data||[]).forEach(x=>{
-        const l=lineupById[x.lineup_id]; if(!l)return;
-        const key=l.match_id+"|"+x.player_id+"|"+l.team_id;
-        if(!participation[key])participation[key]={match_id:l.match_id,player_id:x.player_id,team_id:l.team_id,role:x.role};
-      });
-      Object.values(participation).forEach(x=>{
-        const s=touch(matchSeason[x.match_id],x.player_id,x.team_id); if(!s)return;
-        s.matches_played+=1; if(x.role==="starter"){s.starts+=1;s.minutes_played+=90;}
-      });
-      (ev.data||[]).forEach(x=>{
-        const seasonId=matchSeason[x.match_id]; if(!seasonId)return;
-        if(x.event_type==="goal"&&x.player_id){const s=touch(seasonId,x.player_id,x.team_id);if(s)s.goals+=1;}
-        if((x.event_type==="goal"||x.event_type==="assist")&&x.secondary_player_id){const s=touch(seasonId,x.secondary_player_id,x.team_id);if(s)s.assists+=1;}
-        if(x.event_type==="yellow_card"&&x.player_id){const s=touch(seasonId,x.player_id,x.team_id);if(s)s.yellow_cards+=1;}
-        if(x.event_type==="red_card"&&x.player_id){const s=touch(seasonId,x.player_id,x.team_id);if(s)s.red_cards+=1;}
-      });
-      const rows=Object.values(aggregate);
-      if(rows.length){
-        const up=await supabase.from("official_player_statistics").upsert(rows,{onConflict:"season_id,player_id,team_id"});
-        if(up.error)throw up.error;
+      let seasonIds=[];
+      if(statsSeasonId) seasonIds=[statsSeasonId];
+      else if(statsCompetitionId) seasonIds=seasons.filter(x=>x.competition_id===statsCompetitionId).map(x=>x.id);
+      else seasonIds=seasons.map(x=>x.id);
+      seasonIds=[...new Set(seasonIds.filter(Boolean))];
+      if(!seasonIds.length){setNotice("No seasons are registered for this scope yet.");return;}
+      for(const seasonId of seasonIds){
+        const result=await supabase.rpc("rebuild_official_player_statistics",{p_season_id:seasonId});
+        if(result.error)throw result.error;
       }
       await loadStats();
-      setNotice("Official player statistics rebuilt from verified results, lineups and match events.");
+      setNotice("Official player statistics rebuilt from officially verified results, lineups and match events.");
     }catch(err){setError("Statistics rebuild failed: "+err.message);}
     finally{setSaving(false);}
   }
-
   async function loadStats(){
     const supabase=getSupabase(); if(!supabase)return;
     setError(""); setNotice("");
