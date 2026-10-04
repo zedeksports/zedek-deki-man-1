@@ -716,7 +716,7 @@ export default function ControlRoomPage(){
       <h3>Recent Revenue</h3>{transactions.slice(0,20).map(x=><div className="status-card" key={x.id}><b>{x.transaction_type.toUpperCase()} · {x.currency} {Number(x.amount).toFixed(2)}</b><span>{x.sponsors?.name||"Unassigned sponsor"} · {x.status} · {x.transaction_date}</span></div>)}{!transactions.length&&<p className="muted">No transactions yet.</p>}
     </div>
   </div>
-</div>
+</div>}
 
 {tab==="teams"&&<div className="stats-grid">
         <form className="panel form-stack" onSubmit={saveTeam}>
