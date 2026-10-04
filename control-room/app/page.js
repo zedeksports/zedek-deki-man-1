@@ -438,13 +438,26 @@ export default function ControlRoomPage(){
     e.preventDefault();setNotificationSaving(true);setError("");setNotice("");const supabase=getSupabase();
     const title=notificationForm.title.trim(),body=notificationForm.body.trim();
     if(!title||!body){setNotificationSaving(false);setError("Notification title and message are required.");return;}
-    const {data:users,error:userError}=await supabase.from("profiles").select("id").eq("is_active",true);
-    if(userError){setNotificationSaving(false);setError(userError.message);return;}
-    const rows=(users||[]).map(x=>({user_id:x.id,notification_type:notificationForm.notification_type,title,body,team_id:notificationForm.team_id||null,match_id:notificationForm.match_id||null}));
+    let recipientIds=[];
+    if(notificationForm.team_id||notificationForm.match_id){
+      const [teamFans,matchFans]=await Promise.all([
+        notificationForm.team_id?supabase.from("user_favorite_teams").select("user_id").eq("team_id",notificationForm.team_id):Promise.resolve({data:[],error:null}),
+        notificationForm.match_id?supabase.from("user_favorite_matches").select("user_id").eq("match_id",notificationForm.match_id):Promise.resolve({data:[],error:null})
+      ]);
+      const recipientError=teamFans.error||matchFans.error;
+      if(recipientError){setNotificationSaving(false);setError(recipientError.message);return;}
+      recipientIds=[...new Set([...(teamFans.data||[]),...(matchFans.data||[])].map(x=>x.user_id))];
+      if(!recipientIds.length){setNotificationSaving(false);setError("No followers match the selected notification target.");return;}
+    }else{
+      const {data:users,error:userError}=await supabase.from("profiles").select("id").eq("is_active",true);
+      if(userError){setNotificationSaving(false);setError(userError.message);return;}
+      recipientIds=(users||[]).map(x=>x.id);
+    }
+    const rows=recipientIds.map(user_id=>({user_id,notification_type:notificationForm.notification_type,title,body,team_id:notificationForm.team_id||null,match_id:notificationForm.match_id||null}));
     if(!rows.length){setNotificationSaving(false);setError("There are no active user accounts to notify.");return;}
     const r=await supabase.from("user_notifications").insert(rows);
     setNotificationSaving(false);if(r.error){setError(r.error.message);return;}
-    setNotificationForm({title:"",body:"",notification_type:"news",team_id:"",match_id:""});setNotice("Notification broadcast to "+rows.length+" active user(s).");
+    setNotificationForm({title:"",body:"",notification_type:"news",team_id:"",match_id:""});setNotice("Notification sent to "+rows.length+" recipient(s).");
   }
   async function moderateContent(id,status){
     setSaving(true);setError("");setNotice("");const supabase=getSupabase();
