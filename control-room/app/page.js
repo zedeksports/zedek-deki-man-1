@@ -688,144 +688,145 @@ export default function ControlRoomPage(){
     </div>)}{!reports.length&&<p className="muted">No reports in the queue.</p>}</div>
   </div>
 </div>}
-{tab==="community"?<div className="form-stack">
-  <div className="panel">
-    <h2>Football News & Community Updates</h2>
-    <p className="muted">Publish official Zedek Sports stories and local football community updates to the public site.</p>
-    <form className="form-stack" onSubmit={saveContent}>
-      <div className="stats-grid">
-        <label>Type<select value={contentForm.content_type} onChange={e=>setContentForm({...contentForm,content_type:e.target.value})}><option value="news">Football News</option><option value="community_update">Community Update</option></select></label>
-        <label>Status<select value={contentForm.status} onChange={e=>setContentForm({...contentForm,status:e.target.value})}><option value="draft">Draft</option><option value="published">Published</option><option value="archived">Archived</option></select></label>
-      </div>
-      <label>Title<input required value={contentForm.title} onChange={e=>setContentForm({...contentForm,title:e.target.value})}/></label>
-      <label>Slug<input value={contentForm.slug} onChange={e=>setContentForm({...contentForm,slug:e.target.value})}/></label>
-      <label>Category<input placeholder="Match report, transfer, community..." value={contentForm.category} onChange={e=>setContentForm({...contentForm,category:e.target.value})}/></label>
-      <label>Excerpt<textarea rows="3" value={contentForm.excerpt} onChange={e=>setContentForm({...contentForm,excerpt:e.target.value})}/></label>
-      <label>Story / update body<textarea required rows="9" value={contentForm.body} onChange={e=>setContentForm({...contentForm,body:e.target.value})}/></label>
-      <label>Cover image URL<input value={contentForm.cover_image_url} onChange={e=>setContentForm({...contentForm,cover_image_url:e.target.value})}/></label>
-      <label style={{display:"flex",gap:8,alignItems:"center"}}><input type="checkbox" checked={contentForm.featured} onChange={e=>setContentForm({...contentForm,featured:e.target.checked})}/> Featured</label>
-      <button className="button primary" disabled={saving}>{editingContentId?"Update content":"Save content"}</button>
-      {editingContentId&&<button type="button" className="button" onClick={()=>{setEditingContentId("");setContentForm({content_type:"news",title:"",slug:"",excerpt:"",body:"",category:"",status:"draft",featured:false,cover_image_url:""});}}>Cancel edit</button>}
-    </form>
-    <div className="form-stack" style={{marginTop:18}}>{contentPosts.map(x=><div className="status-card" key={x.id}><b>{x.title}</b><span>{x.content_type==="news"?"NEWS":"COMMUNITY"} · {x.status} · {x.featured?"Featured":"Standard"}</span><p>{x.excerpt||x.body.slice(0,180)}</p><div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="button" onClick={()=>{setEditingContentId(x.id);setContentForm({content_type:x.content_type,title:x.title||"",slug:x.slug||"",excerpt:x.excerpt||"",body:x.body||"",category:x.category||"",status:x.status||"draft",featured:!!x.featured,cover_image_url:x.cover_image_url||""});}}>Edit</button>{x.status!=="archived"&&<button className="button danger" onClick={async()=>{const supabase=getSupabase();setSaving(true);const r=await supabase.from("content_posts").update({status:"archived",updated_at:new Date().toISOString()}).eq("id",x.id);setSaving(false);if(r.error)setError(r.error.message);else{setNotice("Content archived.");await refresh();}}}>Archive</button>}</div></div>)}{!contentPosts.length&&<p className="muted">No content yet.</p>}</div>
-  </div>
-
-  <div className="stats-grid">
-    <div className="panel">
-      <h2>User Feedback</h2>
-      <label>Filter<select value={feedbackFilter} onChange={e=>setFeedbackFilter(e.target.value)}><option value="new">New</option><option value="reviewing">Reviewing</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select></label>
-      <div className="form-stack" style={{marginTop:12}}>{feedbackRows.filter(x=>x.status===feedbackFilter).map(x=><div className="status-card" key={x.id}><b>{x.subject||"Feedback"}</b><span>{x.category} · {x.rating?x.rating+"/5":"No rating"} · {new Date(x.created_at).toLocaleString()}</span><p>{x.message}</p><textarea rows="2" placeholder="Admin note" value={x.admin_note||""} onChange={e=>setFeedbackRows(feedbackRows.map(y=>y.id===x.id?{...y,admin_note:e.target.value}:y))}/><div style={{display:"flex",gap:8}}><button className="button" onClick={()=>updateFeedback(x,"reviewing")}>Review</button><button className="button primary" onClick={()=>updateFeedback(x,"resolved")}>Resolve</button><button className="button" onClick={()=>updateFeedback(x,"closed")}>Close</button></div></div>)}{!feedbackRows.filter(x=>x.status===feedbackFilter).length&&<p className="muted">No feedback in this queue.</p>}</div>
-    </div>
-    <div className="panel">
-      <h2>Survey Manager</h2>
-      <form className="form-stack" onSubmit={saveSurvey}>
-        <label>Survey title<input required value={surveyForm.title} onChange={e=>setSurveyForm({...surveyForm,title:e.target.value})}/></label>
-        <label>Description<textarea rows="3" value={surveyForm.description} onChange={e=>setSurveyForm({...surveyForm,description:e.target.value})}/></label>
-        <label>Status<select value={surveyForm.status} onChange={e=>setSurveyForm({...surveyForm,status:e.target.value})}><option value="draft">Draft</option><option value="published">Published</option><option value="closed">Closed</option></select></label>
-        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}><label>Starts<input type="datetime-local" value={surveyForm.starts_at} onChange={e=>setSurveyForm({...surveyForm,starts_at:e.target.value})}/></label><label>Ends<input type="datetime-local" value={surveyForm.ends_at} onChange={e=>setSurveyForm({...surveyForm,ends_at:e.target.value})}/></label></div>
-        <button className="button primary" disabled={saving}>{editingSurveyId?"Update survey":"Create survey"}</button>
-      </form>
-      <div className="form-stack" style={{marginTop:12}}>{surveys.map(x=><div className="status-card" key={x.id}><b>{x.title}</b><span>{x.status} · {surveyQuestions.filter(q=>q.survey_id===x.id).length} questions</span><div style={{display:"flex",gap:8}}><button className="button" onClick={()=>{setEditingSurveyId(x.id);setSurveyForm({title:x.title||"",description:x.description||"",status:x.status||"draft",starts_at:x.starts_at?new Date(x.starts_at).toISOString().slice(0,16):"",ends_at:x.ends_at?new Date(x.ends_at).toISOString().slice(0,16):""});}}>Edit</button></div></div>)}</div>
-    </div>
-  </div>
-
-  <div className="panel">
-    <h2>Survey Questions</h2>
-    <form className="form-stack" onSubmit={saveQuestion}>
-      <label>Survey<select required value={questionForm.survey_id} onChange={e=>setQuestionForm({...questionForm,survey_id:e.target.value})}><option value="">Select survey</option>{surveys.map(x=><option key={x.id} value={x.id}>{x.title}</option>)}</select></label>
-      <label>Question<input required value={questionForm.prompt} onChange={e=>setQuestionForm({...questionForm,prompt:e.target.value})}/></label>
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}><label>Type<select value={questionForm.question_type} onChange={e=>setQuestionForm({...questionForm,question_type:e.target.value})}><option value="text">Text</option><option value="single">Single choice</option><option value="multi">Multiple choice</option><option value="rating">Rating</option></select></label><label>Order<input type="number" min="1" value={questionForm.sort_order} onChange={e=>setQuestionForm({...questionForm,sort_order:e.target.value})}/></label></div>
-      <label>Options (comma separated)<input value={questionForm.options} onChange={e=>setQuestionForm({...questionForm,options:e.target.value})}/></label>
-      <label style={{display:"flex",gap:8,alignItems:"center"}}><input type="checkbox" checked={questionForm.required} onChange={e=>setQuestionForm({...questionForm,required:e.target.checked})}/> Required</label>
-      <button className="button primary" disabled={saving}>Add question</button>
-    </form>
-  </div>
-
-  <div className="panel">
-    <h2>Sponsors, Advertising & Monetization</h2>
-    <div className="grid" style={{margin:"14px 0"}}>
-      <div className="card"><h2>{sponsors.filter(x=>x.status==="active").length}</h2><p>Active Sponsors</p></div>
-      <div className="card"><h2>{deals.filter(x=>x.status==="active").length}</h2><p>Active Deals</p></div>
-      <div className="card"><h2>GHS {transactions.filter(x=>x.status==="confirmed"&&x.transaction_type==="payment").reduce((a,x)=>a+Number(x.amount||0),0).toFixed(2)}</h2><p>Confirmed Payments</p></div>
-      <div className="card"><h2>{transactions.filter(x=>x.status==="pending").length}</h2><p>Pending Transactions</p></div>
-    </div>
+{tab==="community"&&(
+  <div className="form-stack">
     <div className="stats-grid">
-      <form className="form-stack" onSubmit={saveSponsor}>
-        <h3>Sponsor</h3>
-        <label>Name<input required value={sponsorForm.name} onChange={e=>setSponsorForm({...sponsorForm,name:e.target.value})}/></label>
-        <label>Logo URL<input value={sponsorForm.logo_url} onChange={e=>setSponsorForm({...sponsorForm,logo_url:e.target.value})}/></label>
-        <label>Website<input value={sponsorForm.website_url} onChange={e=>setSponsorForm({...sponsorForm,website_url:e.target.value})}/></label>
-        <label>Contact name<input value={sponsorForm.contact_name} onChange={e=>setSponsorForm({...sponsorForm,contact_name:e.target.value})}/></label>
-        <label>Contact email<input type="email" value={sponsorForm.contact_email} onChange={e=>setSponsorForm({...sponsorForm,contact_email:e.target.value})}/></label>
-        <label>Tier<select value={sponsorForm.tier} onChange={e=>setSponsorForm({...sponsorForm,tier:e.target.value})}><option value="community">Community</option><option value="standard">Standard</option><option value="premium">Premium</option><option value="title">Title</option></select></label>
-        <label>Status<select value={sponsorForm.status} onChange={e=>setSponsorForm({...sponsorForm,status:e.target.value})}><option value="prospect">Prospect</option><option value="active">Active</option><option value="paused">Paused</option><option value="ended">Ended</option></select></label>
-        <button className="button primary" disabled={saving}>{editingSponsorId?"Update sponsor":"Add sponsor"}</button>
-      </form>
-      <form className="form-stack" onSubmit={saveDeal}>
-        <h3>Sponsorship Deal</h3>
-        <label>Sponsor<select required value={dealForm.sponsor_id} onChange={e=>setDealForm({...dealForm,sponsor_id:e.target.value})}><option value="">Select sponsor</option>{sponsors.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
-        <label>Deal name<input required value={dealForm.deal_name} onChange={e=>setDealForm({...dealForm,deal_name:e.target.value})}/></label>
-        <label>Amount<input type="number" min="0" step="0.01" value={dealForm.amount} onChange={e=>setDealForm({...dealForm,amount:e.target.value})}/></label>
-        <label>Placement<input placeholder="Homepage, competition, tournament..." value={dealForm.placement} onChange={e=>setDealForm({...dealForm,placement:e.target.value})}/></label>
-        <label>Status<select value={dealForm.status} onChange={e=>setDealForm({...dealForm,status:e.target.value})}><option value="proposed">Proposed</option><option value="active">Active</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select></label>
-        <button className="button primary" disabled={saving}>Save deal</button>
-      </form>
-      <form className="form-stack" onSubmit={saveAd}>
-        <h3>Ad Slot</h3>
-        <label>Name<input required value={adForm.name} onChange={e=>setAdForm({...adForm,name:e.target.value})}/></label>
-        <label>Placement<input value={adForm.placement} onChange={e=>setAdForm({...adForm,placement:e.target.value})}/></label>
-        <label>Format<select value={adForm.format} onChange={e=>setAdForm({...adForm,format:e.target.value})}><option value="banner">Banner</option><option value="card">Card</option><option value="logo">Logo</option><option value="native">Native</option></select></label>
-        <label>Sponsor<select value={adForm.sponsor_id} onChange={e=>setAdForm({...adForm,sponsor_id:e.target.value})}><option value="">None</option>{sponsors.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
-        <label>Image URL<input value={adForm.image_url} onChange={e=>setAdForm({...adForm,image_url:e.target.value})}/></label>
-        <label>Target URL<input value={adForm.target_url} onChange={e=>setAdForm({...adForm,target_url:e.target.value})}/></label>
-        <label style={{display:"flex",gap:8,alignItems:"center"}}><input type="checkbox" checked={adForm.active} onChange={e=>setAdForm({...adForm,active:e.target.checked})}/> Active</label>
-        <button className="button primary" disabled={saving}>{editingAdId?"Update ad slot":"Add ad slot"}</button>
-      </form>
-      <form className="form-stack" onSubmit={saveTransaction}>
-        <h3>Revenue Ledger</h3>
-        <label>Sponsor<select value={transactionForm.sponsor_id} onChange={e=>setTransactionForm({...transactionForm,sponsor_id:e.target.value})}><option value="">None</option>{sponsors.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
-        <label>Deal<select value={transactionForm.deal_id} onChange={e=>setTransactionForm({...transactionForm,deal_id:e.target.value})}><option value="">None</option>{deals.map(x=><option key={x.id} value={x.id}>{x.deal_name}</option>)}</select></label>
-        <label>Type<select value={transactionForm.transaction_type} onChange={e=>setTransactionForm({...transactionForm,transaction_type:e.target.value})}><option value="payment">Payment</option><option value="invoice">Invoice</option><option value="refund">Refund</option><option value="adjustment">Adjustment</option></select></label>
-        <label>Amount<input required type="number" step="0.01" value={transactionForm.amount} onChange={e=>setTransactionForm({...transactionForm,amount:e.target.value})}/></label>
-        <label>Date<input type="date" value={transactionForm.transaction_date} onChange={e=>setTransactionForm({...transactionForm,transaction_date:e.target.value})}/></label>
-        <label>Status<select value={transactionForm.status} onChange={e=>setTransactionForm({...transactionForm,status:e.target.value})}><option value="pending">Pending</option><option value="confirmed">Confirmed</option><option value="cancelled">Cancelled</option></select></label>
-        <label>Reference<input value={transactionForm.reference} onChange={e=>setTransactionForm({...transactionForm,reference:e.target.value})}/></label>
-        <button className="button primary" disabled={saving}>Record transaction</button>
-      </form>
-    </div>
-    <div className="form-stack" style={{marginTop:16}}>
-      <h3>Active Sponsors</h3>{sponsors.map(x=><div className="status-card" key={x.id}><b>{x.name}</b><span>{x.tier} · {x.status} · {x.website_url||"No website"}</span><button className="button" onClick={()=>{setEditingSponsorId(x.id);setSponsorForm({name:x.name||"",logo_url:x.logo_url||"",website_url:x.website_url||"",contact_name:x.contact_name||"",contact_email:x.contact_email||"",contact_phone:x.contact_phone||"",tier:x.tier||"standard",status:x.status||"prospect",start_date:x.start_date||"",end_date:x.end_date||"",notes:x.notes||""});}}>Edit</button></div>)}
-      <h3>Sponsorship Deals</h3>{deals.map(x=><div className="status-card" key={x.id}><b>{x.deal_name}</b><span>{x.sponsors?.name||"Sponsor"} · {x.currency} {Number(x.amount).toFixed(2)} · {x.status} · {x.placement||"Placement not set"}</span></div>)}{!deals.length&&<p className="muted">No sponsorship deals yet.</p>}
-      <h3>Ad Slots</h3>{ads.map(x=><div className="status-card" key={x.id}><b>{x.name}</b><span>{x.placement} · {x.format} · {x.active?"ACTIVE":"inactive"} · {x.sponsors?.name||"No sponsor"}</span><button className="button" onClick={()=>{setEditingAdId(x.id);setAdForm({name:x.name||"",placement:x.placement||"homepage",format:x.format||"banner",sponsor_id:x.sponsor_id||"",image_url:x.image_url||"",target_url:x.target_url||"",active:!!x.active,start_date:x.start_date||"",end_date:x.end_date||""});}}>Edit</button></div>)}{!ads.length&&<p className="muted">No ad slots yet.</p>}
-      <h3>Recent Revenue</h3>{transactions.slice(0,20).map(x=><div className="status-card" key={x.id}><b>{x.transaction_type.toUpperCase()} · {x.currency} {Number(x.amount).toFixed(2)}</b><span>{x.sponsors?.name||"Unassigned sponsor"} · {x.status} · {x.transaction_date}</span></div>)}{!transactions.length&&<p className="muted">No transactions yet.</p>}
-    </div>
-  <div className="stats-grid">
-    <div className="panel">
-      <h2>Moderation & Publishing Queue</h2>
-      <p className="muted">Review public stories, community updates, survey status and incoming feedback before they remain visible or are closed.</p>
-      <div className="form-stack">
-        {contentPosts.filter(x=>x.status!=="published").slice(0,12).map(x=><div className="status-card" key={"mod-"+x.id}><b>{x.title}</b><span>{x.content_type==="news"?"NEWS":"COMMUNITY"} · {x.status}</span><div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="button primary" onClick={()=>moderateContent(x.id,"published")}>Approve & publish</button><button className="button danger" onClick={()=>moderateContent(x.id,"archived")}>Archive</button></div></div>)}
-        {!contentPosts.filter(x=>x.status!=="published").length&&<p className="muted">No unpublished content is waiting for moderation.</p>}
-        {feedbackRows.filter(x=>x.status==="new").slice(0,12).map(x=><div className="status-card" key={"fb-"+x.id}><b>{x.subject||"Community feedback"}</b><span>{x.category} · {new Date(x.created_at).toLocaleString()}</span><p>{x.message}</p><div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="button" onClick={()=>updateFeedback(x,"reviewing")}>Start review</button><button className="button primary" onClick={()=>updateFeedback(x,"resolved")}>Resolve</button><button className="button danger" onClick={()=>updateFeedback(x,"closed")}>Close</button></div></div>)}
-        {!feedbackRows.filter(x=>x.status==="new").length&&<p className="muted">No new feedback is waiting for review.</p>}
-        {surveys.filter(x=>x.status==="published").slice(0,8).map(x=><div className="status-card" key={"survey-"+x.id}><b>{x.title}</b><span>Survey · {x.status} · {surveyQuestions.filter(q=>q.survey_id===x.id).length} question(s)</span><button className="button danger" onClick={()=>closeSurvey(x.id)}>Close survey</button></div>)}
+      <div className="panel">
+        <h2>Football News & Community Updates</h2>
+        <form className="form-stack" onSubmit={saveContent}>
+          <label>Type<select value={contentForm.content_type} onChange={e=>setContentForm({...contentForm,content_type:e.target.value})}><option value="news">Football News</option><option value="community_update">Community Update</option></select></label>
+          <label>Status<select value={contentForm.status} onChange={e=>setContentForm({...contentForm,status:e.target.value})}><option value="draft">Draft</option><option value="published">Published</option><option value="archived">Archived</option></select></label>
+          <label>Title<input required value={contentForm.title} onChange={e=>setContentForm({...contentForm,title:e.target.value})}/></label>
+          <label>Slug<input value={contentForm.slug} onChange={e=>setContentForm({...contentForm,slug:e.target.value})}/></label>
+          <label>Category<input value={contentForm.category} onChange={e=>setContentForm({...contentForm,category:e.target.value})}/></label>
+          <label>Excerpt<textarea rows="3" value={contentForm.excerpt} onChange={e=>setContentForm({...contentForm,excerpt:e.target.value})}/></label>
+          <label>Story / update body<textarea required rows="8" value={contentForm.body} onChange={e=>setContentForm({...contentForm,body:e.target.value})}/></label>
+          <label>Cover image URL<input value={contentForm.cover_image_url} onChange={e=>setContentForm({...contentForm,cover_image_url:e.target.value})}/></label>
+          <label><input type="checkbox" checked={contentForm.featured} onChange={e=>setContentForm({...contentForm,featured:e.target.checked})}/> Featured</label>
+          <button className="button primary" disabled={saving}>{editingContentId?"Update content":"Save content"}</button>
+        </form>
+      </div>
+      <div className="panel">
+        <h2>Published & Draft Content</h2>
+        <div className="form-stack">
+          {contentPosts.map(x=>(
+            <div className="status-card" key={x.id}>
+              <b>{x.title}</b>
+              <span>{x.content_type} · {x.status}</span>
+              <p>{x.excerpt||x.body?.slice(0,180)||""}</p>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                <button className="button" onClick={()=>{setEditingContentId(x.id);setContentForm({content_type:x.content_type||"news",title:x.title||"",slug:x.slug||"",excerpt:x.excerpt||"",body:x.body||"",category:x.category||"",status:x.status||"draft",featured:!!x.featured,cover_image_url:x.cover_image_url||""});}}>Edit</button>
+                {x.status!=="published"&&<button className="button primary" onClick={()=>moderateContent(x.id,"published")}>Publish</button>}
+                {x.status!=="archived"&&<button className="button danger" onClick={()=>moderateContent(x.id,"archived")}>Archive</button>}
+              </div>
+            </div>
+          ))}
+          {!contentPosts.length&&<p className="muted">No content yet.</p>}
+        </div>
       </div>
     </div>
+
+    <div className="stats-grid">
+      <div className="panel">
+        <h2>Community Feedback</h2>
+        <label>Queue<select value={feedbackFilter} onChange={e=>setFeedbackFilter(e.target.value)}><option value="new">New</option><option value="reviewing">Reviewing</option><option value="resolved">Resolved</option><option value="closed">Closed</option></select></label>
+        <div className="form-stack" style={{marginTop:12}}>
+          {feedbackRows.filter(x=>x.status===feedbackFilter).map(x=>(
+            <div className="status-card" key={x.id}>
+              <b>{x.subject||"Feedback"}</b>
+              <span>{x.category} · {x.rating?x.rating+"/5":"No rating"}</span>
+              <p>{x.message}</p>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                <button className="button" onClick={()=>updateFeedback(x,"reviewing")}>Review</button>
+                <button className="button primary" onClick={()=>updateFeedback(x,"resolved")}>Resolve</button>
+                <button className="button danger" onClick={()=>updateFeedback(x,"closed")}>Close</button>
+              </div>
+            </div>
+          ))}
+          {!feedbackRows.filter(x=>x.status===feedbackFilter).length&&<p className="muted">No feedback in this queue.</p>}
+        </div>
+      </div>
+      <div className="panel">
+        <h2>Survey Manager</h2>
+        <form className="form-stack" onSubmit={saveSurvey}>
+          <label>Title<input required value={surveyForm.title} onChange={e=>setSurveyForm({...surveyForm,title:e.target.value})}/></label>
+          <label>Description<textarea rows="3" value={surveyForm.description} onChange={e=>setSurveyForm({...surveyForm,description:e.target.value})}/></label>
+          <label>Status<select value={surveyForm.status} onChange={e=>setSurveyForm({...surveyForm,status:e.target.value})}><option value="draft">Draft</option><option value="published">Published</option><option value="closed">Closed</option></select></label>
+          <button className="button primary" disabled={saving}>{editingSurveyId?"Update survey":"Create survey"}</button>
+        </form>
+        <div className="form-stack" style={{marginTop:12}}>
+          {surveys.map(x=>(
+            <div className="status-card" key={x.id}>
+              <b>{x.title}</b><span>{x.status} · {surveyQuestions.filter(q=>q.survey_id===x.id).length} questions</span>
+              {x.status==="published"&&<button className="button danger" onClick={()=>closeSurvey(x.id)}>Close survey</button>}
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+
+    <div className="panel">
+      <h2>Survey Questions</h2>
+      <form className="form-stack" onSubmit={saveQuestion}>
+        <label>Survey<select required value={questionForm.survey_id} onChange={e=>setQuestionForm({...questionForm,survey_id:e.target.value})}><option value="">Select survey</option>{surveys.map(x=><option key={x.id} value={x.id}>{x.title}</option>)}</select></label>
+        <label>Question<input required value={questionForm.prompt} onChange={e=>setQuestionForm({...questionForm,prompt:e.target.value})}/></label>
+        <label>Type<select value={questionForm.question_type} onChange={e=>setQuestionForm({...questionForm,question_type:e.target.value})}><option value="text">Text</option><option value="rating">Rating</option><option value="single_choice">Single choice</option><option value="multiple_choice">Multiple choice</option></select></label>
+        <label>Options<input value={questionForm.options} onChange={e=>setQuestionForm({...questionForm,options:e.target.value})}/></label>
+        <button className="button primary" disabled={saving}>Add question</button>
+      </form>
+      <div className="form-stack" style={{marginTop:12}}>
+        {surveyQuestions.map(q=><div className="status-card" key={q.id}><b>{q.prompt}</b><span>{q.question_type} · {q.required?"Required":"Optional"}</span></div>)}
+      </div>
+    </div>
+
+    <div className="panel">
+      <h2>Sponsors & Monetization</h2>
+      <div className="stats-grid">
+        <form className="form-stack" onSubmit={saveSponsor}>
+          <h3>Sponsor</h3>
+          <label>Name<input required value={sponsorForm.name} onChange={e=>setSponsorForm({...sponsorForm,name:e.target.value})}/></label>
+          <label>Website<input value={sponsorForm.website_url} onChange={e=>setSponsorForm({...sponsorForm,website_url:e.target.value})}/></label>
+          <label>Tier<select value={sponsorForm.tier} onChange={e=>setSponsorForm({...sponsorForm,tier:e.target.value})}><option value="community">Community</option><option value="standard">Standard</option><option value="premium">Premium</option><option value="title">Title</option></select></label>
+          <label>Status<select value={sponsorForm.status} onChange={e=>setSponsorForm({...sponsorForm,status:e.target.value})}><option value="prospect">Prospect</option><option value="active">Active</option><option value="paused">Paused</option><option value="ended">Ended</option></select></label>
+          <button className="button primary" disabled={saving}>{editingSponsorId?"Update sponsor":"Add sponsor"}</button>
+        </form>
+        <div className="panel">
+          <h3>Active Sponsors</h3>
+          {sponsors.map(x=><div className="status-card" key={x.id}><b>{x.name}</b><span>{x.tier} · {x.status}</span></div>)}
+          {!sponsors.length&&<p className="muted">No sponsors yet.</p>}
+        </div>
+      </div>
+      <div className="stats-grid" style={{marginTop:16}}>
+        <form className="form-stack" onSubmit={saveDeal}>
+          <h3>Sponsorship Deal</h3>
+          <label>Sponsor<select required value={dealForm.sponsor_id} onChange={e=>setDealForm({...dealForm,sponsor_id:e.target.value})}><option value="">Select sponsor</option>{sponsors.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+          <label>Deal name<input required value={dealForm.deal_name} onChange={e=>setDealForm({...dealForm,deal_name:e.target.value})}/></label>
+          <label>Amount<input type="number" step="0.01" value={dealForm.amount} onChange={e=>setDealForm({...dealForm,amount:e.target.value})}/></label>
+          <button className="button primary" disabled={saving}>Save deal</button>
+        </form>
+        <form className="form-stack" onSubmit={saveTransaction}>
+          <h3>Revenue Ledger</h3>
+          <label>Type<select value={transactionForm.transaction_type} onChange={e=>setTransactionForm({...transactionForm,transaction_type:e.target.value})}><option value="payment">Payment</option><option value="invoice">Invoice</option><option value="refund">Refund</option><option value="adjustment">Adjustment</option></select></label>
+          <label>Amount<input required type="number" step="0.01" value={transactionForm.amount} onChange={e=>setTransactionForm({...transactionForm,amount:e.target.value})}/></label>
+          <label>Status<select value={transactionForm.status} onChange={e=>setTransactionForm({...transactionForm,status:e.target.value})}><option value="pending">Pending</option><option value="confirmed">Confirmed</option><option value="cancelled">Cancelled</option></select></label>
+          <button className="button primary" disabled={saving}>Record transaction</button>
+        </form>
+      </div>
+    </div>
+
     <div className="panel">
       <h2>Notification Centre</h2>
-      <p className="muted">Send an official announcement to every active Zedek Sports account. Match/team targeting remains available for future event-specific campaigns.</p>
       <form className="form-stack" onSubmit={sendBroadcastNotification}>
-        <label>Notification type<select value={notificationForm.notification_type} onChange={e=>setNotificationForm({...notificationForm,notification_type:e.target.value})}><option value="news">News</option><option value="community">Community update</option><option value="announcement">Announcement</option><option value="sponsor">Sponsor</option></select></label>
+        <label>Type<select value={notificationForm.notification_type} onChange={e=>setNotificationForm({...notificationForm,notification_type:e.target.value})}><option value="news">News</option><option value="community">Community update</option><option value="announcement">Announcement</option><option value="sponsor">Sponsor</option></select></label>
         <label>Title<input required value={notificationForm.title} onChange={e=>setNotificationForm({...notificationForm,title:e.target.value})}/></label>
         <label>Message<textarea required rows="5" value={notificationForm.body} onChange={e=>setNotificationForm({...notificationForm,body:e.target.value})}/></label>
-        <label>Team (optional)<select value={notificationForm.team_id} onChange={e=>setNotificationForm({...notificationForm,team_id:e.target.value})}><option value="">All teams</option>{teams.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
-        <label>Match (optional)<select value={notificationForm.match_id} onChange={e=>setNotificationForm({...notificationForm,match_id:e.target.value})}><option value="">No match link</option>{matches.slice(0,50).map(x=><option key={x.id} value={x.id}>{x.home?.name||"Home"} vs {x.away?.name||"Away"} · {fmtDate(x.scheduled_at)}</option>)}</select></label>
+        <label>Team<select value={notificationForm.team_id} onChange={e=>setNotificationForm({...notificationForm,team_id:e.target.value})}><option value="">All teams</option>{teams.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+        <label>Match<select value={notificationForm.match_id} onChange={e=>setNotificationForm({...notificationForm,match_id:e.target.value})}><option value="">No match link</option>{matches.slice(0,50).map(x=><option key={x.id} value={x.id}>{x.home?.name||"Home"} vs {x.away?.name||"Away"}</option>)}</select></label>
         <button className="button primary" disabled={notificationSaving}>{notificationSaving?"Broadcasting…":"Broadcast notification"}</button>
       </form>
     </div>
   </div>
-</div>:null}
-
+)}
 {tab==="teams"&&<div className="stats-grid">
         <form className="panel form-stack" onSubmit={saveTeam}>
           <h2>{editingTeamId?"Edit team":"Team registry"}</h2><label>Team name<input required value={team.name} onChange={e=>setTeam({...team,name:e.target.value})}/></label><label>Short name<input value={team.short_name} onChange={e=>setTeam({...team,short_name:e.target.value})}/></label><label>Area<input value={team.area} onChange={e=>setTeam({...team,area:e.target.value})}/></label><label>Home venue<input value={team.home_venue} onChange={e=>setTeam({...team,home_venue:e.target.value})}/></label><label>Team logo<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={e=>setTeam({...team,image:e.target.files?.[0]||null})}/></label>{team.image&&<span className="muted">Selected: {team.image.name}</span>}<button className="button primary" disabled={saving}>{saving?"Saving…":editingTeamId?"Save team changes":"Register team"}</button><button type="button" className="button" disabled={saving} onClick={()=>{setEditingTeamId("");setTeam({id:"",name:"",short_name:"",area:"",home_venue:"",image:null});}}>Cancel</button>
