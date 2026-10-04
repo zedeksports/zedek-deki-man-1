@@ -659,6 +659,12 @@ export default function ControlRoomPage(){
 
   <div className="panel">
     <h2>Sponsors, Advertising & Monetization</h2>
+    <div className="grid" style={{margin:"14px 0"}}>
+      <div className="card"><h2>{sponsors.filter(x=>x.status==="active").length}</h2><p>Active Sponsors</p></div>
+      <div className="card"><h2>{deals.filter(x=>x.status==="active").length}</h2><p>Active Deals</p></div>
+      <div className="card"><h2>GHS {transactions.filter(x=>x.status==="confirmed"&&x.transaction_type==="payment").reduce((a,x)=>a+Number(x.amount||0),0).toFixed(2)}</h2><p>Confirmed Payments</p></div>
+      <div className="card"><h2>{transactions.filter(x=>x.status==="pending").length}</h2><p>Pending Transactions</p></div>
+    </div>
     <div className="stats-grid">
       <form className="form-stack">
         <h3>Sponsor</h3>
@@ -698,12 +704,14 @@ export default function ControlRoomPage(){
         <label>Type<select value={transactionForm.transaction_type} onChange={e=>setTransactionForm({...transactionForm,transaction_type:e.target.value})}><option value="payment">Payment</option><option value="invoice">Invoice</option><option value="refund">Refund</option><option value="adjustment">Adjustment</option></select></label>
         <label>Amount<input required type="number" step="0.01" value={transactionForm.amount} onChange={e=>setTransactionForm({...transactionForm,amount:e.target.value})}/></label>
         <label>Date<input type="date" value={transactionForm.transaction_date} onChange={e=>setTransactionForm({...transactionForm,transaction_date:e.target.value})}/></label>
-        <label>Reference<input value={transactionForm.reference} onChange={e=>setTransactionForm({...transactionForm,reference:e.target.value})}/></label>
+        <label>Status<select value={transactionForm.status} onChange={e=>setTransactionForm({...transactionForm,status:e.target.value})}><option value="pending">Pending</option><option value="confirmed">Confirmed</option><option value="cancelled">Cancelled</option></select></label>\n        <label>Reference<input value={transactionForm.reference} onChange={e=>setTransactionForm({...transactionForm,reference:e.target.value})}/></label>
         <button className="button primary" disabled={saving}>Record transaction</button>
       </form>
     </div>
     <div className="form-stack" style={{marginTop:16}}>
       <h3>Active Sponsors</h3>{sponsors.map(x=><div className="status-card" key={x.id}><b>{x.name}</b><span>{x.tier} · {x.status} · {x.website_url||"No website"}</span><button className="button" onClick={()=>{setEditingSponsorId(x.id);setSponsorForm({name:x.name||"",logo_url:x.logo_url||"",website_url:x.website_url||"",contact_name:x.contact_name||"",contact_email:x.contact_email||"",contact_phone:x.contact_phone||"",tier:x.tier||"standard",status:x.status||"prospect",start_date:x.start_date||"",end_date:x.end_date||"",notes:x.notes||""});}}>Edit</button></div>)}
+      <h3>Sponsorship Deals</h3>{deals.map(x=><div className="status-card" key={x.id}><b>{x.deal_name}</b><span>{x.sponsors?.name||"Sponsor"} · {x.currency} {Number(x.amount).toFixed(2)} · {x.status} · {x.placement||"Placement not set"}</span></div>)}{!deals.length&&<p className="muted">No sponsorship deals yet.</p>}
+      <h3>Ad Slots</h3>{ads.map(x=><div className="status-card" key={x.id}><b>{x.name}</b><span>{x.placement} · {x.format} · {x.active?"ACTIVE":"inactive"} · {x.sponsors?.name||"No sponsor"}</span><button className="button" onClick={()=>{setEditingAdId(x.id);setAdForm({name:x.name||"",placement:x.placement||"homepage",format:x.format||"banner",sponsor_id:x.sponsor_id||"",image_url:x.image_url||"",target_url:x.target_url||"",active:!!x.active,start_date:x.start_date||"",end_date:x.end_date||""});}}>Edit</button></div>)}{!ads.length&&<p className="muted">No ad slots yet.</p>}
       <h3>Recent Revenue</h3>{transactions.slice(0,20).map(x=><div className="status-card" key={x.id}><b>{x.transaction_type.toUpperCase()} · {x.currency} {Number(x.amount).toFixed(2)}</b><span>{x.sponsors?.name||"Unassigned sponsor"} · {x.status} · {x.transaction_date}</span></div>)}{!transactions.length&&<p className="muted">No transactions yet.</p>}
     </div>
   </div>
