@@ -787,6 +787,7 @@ export default function ControlRoomPage(){
       </form>
     </div>
   </div>
+</div>}
 
 {tab==="teams"&&<div className="stats-grid">
         <form className="panel form-stack" onSubmit={saveTeam}>
