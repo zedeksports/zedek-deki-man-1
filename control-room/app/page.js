@@ -356,7 +356,7 @@ export default function ControlRoomPage(){
     <section className="container">
       {error&&<div className="error-box">{error}</div>}{notice&&<div className="success-box">{notice}</div>}
       <div className="nav-links" style={{margin:"16px 0",overflowX:"auto",flexWrap:"nowrap"}}>
-        {TABS.map(item=><button key={item} className={"button "+(tab===item?"primary":"")} onClick={()=>setTab(item)}>{item.replace("_"," ").replace(/^./,x=>x.toUpperCase())}</button>)}
+        {TABS.map(item=><button key={item} className={"button "+(tab===item?"primary":"")} onClick={()=>setTab(item)}>{item.replace("_"," ").replace(/^./,x=>x.toUpperCase())}</button>)}<a className="button" href="/reporters">Reporters</a>
       </div>
 
       {tab==="stats" && (

@@ -19,8 +19,11 @@ export default function LoginPage() {
   useEffect(() => {
     const supabase=getSupabase();
     if (!supabase) return;
-    supabase.auth.getSession().then(({data}) => {
-      if (data.session) window.location.href="/";
+    supabase.auth.getSession().then(async ({data}) => {
+      if (!data.session) return;
+      const p=await supabase.from("profiles").select("role,is_active").eq("id",data.session.user.id).maybeSingle();
+      if (p.data?.role==="reporter" && p.data.is_active) window.location.href="/reporter";
+      else window.location.href="/";
     });
   },[]);
 
@@ -35,10 +38,12 @@ export default function LoginPage() {
     setMessage(""); setLoading(true);
     const supabase=getSupabase();
     if (!supabase) { setMessage("Supabase configuration is unavailable."); setLoading(false); return; }
-    const {error}=await supabase.auth.signInWithPassword({email,password});
+    const {data,error}=await supabase.auth.signInWithPassword({email,password});
     setLoading(false);
     if (error) { setMessage(error.message); return; }
-    window.location.href="/";
+    const p=await supabase.from("profiles").select("role,is_active").eq("id",data.user.id).maybeSingle();
+    if (p.data?.role==="reporter" && p.data.is_active) window.location.href="/reporter";
+    else window.location.href="/";
   }
 
   async function signUp() {
