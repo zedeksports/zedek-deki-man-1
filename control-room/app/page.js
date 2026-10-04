@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "../lib/supabase/browser";
 
-const TABS=["overview","competitions","seasons","stages","fixtures","live","lineups","review","stats","community","teams","players","coaches"];
+const TABS=["overview","competitions","seasons","stages","fixtures","live","lineups","review","stats","community","teams","players","coaches","officials"];
 const STAGE_TYPES=["league","group","knockout","quarter_final","semi_final","final"];
 
 function getSupabase(){if(typeof window==="undefined")return null;return createSupabaseBrowserClient();}
@@ -12,14 +12,15 @@ function fmtDate(v){return v?new Date(v).toLocaleString():"—";}
 export default function ControlRoomPage(){
   const [loading,setLoading]=useState(true),[user,setUser]=useState(null),[profile,setProfile]=useState(null);
   const [tab,setTab]=useState("overview"),[error,setError]=useState(""),[notice,setNotice]=useState("");
-  const [competitions,setCompetitions]=useState([]),[seasons,setSeasons]=useState([]),[teams,setTeams]=useState([]),[players,setPlayers]=useState([]),[coaches,setCoaches]=useState([]),[stages,setStages]=useState([]),[matches,setMatches]=useState([]);
+  const [competitions,setCompetitions]=useState([]),[seasons,setSeasons]=useState([]),[teams,setTeams]=useState([]),[players,setPlayers]=useState([]),[coaches,setCoaches]=useState([]),[officialProfiles,setOfficialProfiles]=useState([]),[teamOfficials,setTeamOfficials]=useState([]),[stages,setStages]=useState([]),[matches,setMatches]=useState([]);
   const [competition,setCompetition]=useState({id:"",name:"",code:"",location:"",format:"league",image:null}); const [editingCompetitionId,setEditingCompetitionId]=useState("");
   const [season,setSeason]=useState({competition_id:"",name:"",year:"",start_date:"",end_date:""});
   const [stage,setStage]=useState({season_id:"",name:"",stage_type:"league",stage_order:"1",is_active:true});
   const [fixture,setFixture]=useState({season_id:"",stage_id:"",home_team_id:"",away_team_id:"",scheduled_at:"",venue:"",round_name:"",leg:"1",notes:""});
   const [team,setTeam]=useState({id:"",name:"",short_name:"",area:"",home_venue:"",image:null});
   const [player,setPlayer]=useState({id:"",team_id:"",full_name:"",shirt_number:"",position:"",image:null});
-  const [coach,setCoach]=useState({team_id:"",full_name:"",date_of_birth:"",nationality:"",role:"Head Coach",image:null}); const [editingTeamId,setEditingTeamId]=useState(""); const [editingPlayerId,setEditingPlayerId]=useState("");
+  const [coach,setCoach]=useState({team_id:"",full_name:"",date_of_birth:"",nationality:"",role:"Head Coach",image:null});
+  const [officialForm,setOfficialForm]=useState({team_id:"",user_id:"",role:"Team Official",start_date:"",end_date:""}); const [editingTeamId,setEditingTeamId]=useState(""); const [editingPlayerId,setEditingPlayerId]=useState("");
   const [saving,setSaving]=useState(false),[statsCompetitionId,setStatsCompetitionId]=useState(""),[statsSeasonId,setStatsSeasonId]=useState(""),[officialStats,setOfficialStats]=useState([]),[statsData,setStatsData]=useState({standings:[],scorers:[],recent:[],form:[]}),[h2hHome,setH2hHome]=useState(""),[h2hAway,setH2hAway]=useState(""),[h2hData,setH2hData]=useState([]),[h2hSummary,setH2hSummary]=useState(null), [reportMatch,setReportMatch]=useState(null), [report,setReport]=useState(null), [reports,setReports]=useState([]),[liveMatch,setLiveMatch]=useState(null),[events,setEvents]=useState([]),[matchStats,setMatchStats]=useState(null),[clock,setClock]=useState(0),[eventForm,setEventForm]=useState({type:"goal",team_id:"",player_id:"",secondary_player_id:"",minute:"",extra_minute:"",details:""}),[lineupMatch,setLineupMatch]=useState(null),[lineupTeam,setLineupTeam]=useState(""),[lineup,setLineup]=useState(null),[lineupPlayers,setLineupPlayers]=useState([]),[lineupLoading,setLineupLoading]=useState(false);
   const [contentPosts,setContentPosts]=useState([]),[editingContentId,setEditingContentId]=useState("");
   const [contentForm,setContentForm]=useState({content_type:"news",title:"",slug:"",excerpt:"",body:"",category:"",status:"draft",featured:false,cover_image_url:""});
@@ -39,12 +40,14 @@ export default function ControlRoomPage(){
 
   async function refresh(){
     setError(""); const supabase=getSupabase(); if(!supabase)return;
-    const [a,b,c,d,coachRows,e,f,contentRows,surveyRows,questionRows,feedbackResult,sponsorRows,dealRows,adRows,transactionRows]=await Promise.all([
+    const [a,b,c,d,coachRows,officialProfileRows,officialAssignmentRows,e,f,contentRows,surveyRows,questionRows,feedbackResult,sponsorRows,dealRows,adRows,transactionRows]=await Promise.all([
       supabase.from("competitions").select("*").order("name"),
       supabase.from("seasons").select("*, competitions(name)").order("created_at",{ascending:false}),
       supabase.from("teams").select("*").order("name"),
       supabase.from("players").select("*, teams(name)").order("full_name"),
       supabase.from("coaches").select("*, team_coaches(team_id,is_current,teams(name))").order("full_name"),
+      supabase.from("profiles").select("id,full_name,phone,role,is_active").eq("role","team_official").eq("is_active",true).order("full_name"),
+      supabase.from("team_officials").select("*, teams(name), profiles(id,full_name,phone,is_active,role)").order("created_at",{ascending:false}),
       supabase.from("stages").select("*, seasons(name, competitions(name))").order("season_id").order("stage_order"),
       supabase.from("matches").select("*, home:teams!matches_home_team_id_fkey(name), away:teams!matches_away_team_id_fkey(name), seasons(name), stages(name)").order("scheduled_at",{ascending:true}),
       supabase.from("content_posts").select("*").order("created_at",{ascending:false}),
@@ -56,8 +59,8 @@ export default function ControlRoomPage(){
       supabase.from("ad_slots").select("*, sponsors(name)").order("created_at",{ascending:false}),
       supabase.from("monetization_transactions").select("*, sponsors(name), sponsorship_deals(deal_name)").order("transaction_date",{ascending:false}).order("created_at",{ascending:false})
     ]);
-    const bad=[a,b,c,d,coachRows,e,f,contentRows,surveyRows,questionRows,feedbackResult,sponsorRows,dealRows,adRows,transactionRows].find(x=>x.error); if(bad){setError(bad.error.message);return;}
-    setCompetitions(a.data||[]);setSeasons(b.data||[]);setTeams(c.data||[]);setPlayers(d.data||[]);setCoaches(coachRows.data||[]);
+    const bad=[a,b,c,d,coachRows,officialProfileRows,officialAssignmentRows,e,f,contentRows,surveyRows,questionRows,feedbackResult,sponsorRows,dealRows,adRows,transactionRows].find(x=>x.error); if(bad){setError(bad.error.message);return;}
+    setCompetitions(a.data||[]);setSeasons(b.data||[]);setTeams(c.data||[]);setPlayers(d.data||[]);setCoaches(coachRows.data||[]);setOfficialProfiles(officialProfileRows.data||[]);setTeamOfficials(officialAssignmentRows.data||[]);
     setStages(e.data||[]);setMatches(f.data||[]);
     setContentPosts(contentRows.data||[]);setSurveys(surveyRows.data||[]);setSurveyQuestions(questionRows.data||[]);setFeedbackRows(feedbackResult.data||[]);
     setSponsors(sponsorRows.data||[]);setDeals(dealRows.data||[]);setAds(adRows.data||[]);setTransactions(transactionRows.data||[]);
@@ -98,6 +101,26 @@ export default function ControlRoomPage(){
   }
   function editTeam(x){setEditingTeamId(x.id);setTeam({id:x.id,name:x.name||"",short_name:x.short_name||"",area:x.area||"",home_venue:x.home_venue||"",image:null});setTab("teams");window.scrollTo({top:0,behavior:"smooth"});}
   async function deleteTeam(x){if(!window.confirm("Delete "+x.name+"? This cannot be undone."))return;setSaving(true);setError("");setNotice("");const supabase=getSupabase();const result=await supabase.from("teams").delete().eq("id",x.id);if(result.error){setSaving(false);setError("Team could not be deleted: "+result.error.message);return;}setSaving(false);setNotice("Team deleted successfully.");await refresh();}
+
+  async function saveOfficial(e){
+    e.preventDefault();setSaving(true);setError("");setNotice("");
+    const supabase=getSupabase();
+    if(!officialForm.team_id||!officialForm.user_id){setSaving(false);setError("Select both a team and a team-official account.");return;}
+    const values={team_id:officialForm.team_id,user_id:officialForm.user_id,role:officialForm.role.trim()||"Team Official",is_current:true,start_date:officialForm.start_date||new Date().toISOString().slice(0,10),end_date:officialForm.end_date||null};
+    const old=await supabase.from("team_officials").update({is_current:false,end_date:values.start_date}).eq("team_id",values.team_id).eq("user_id",values.user_id).eq("role",values.role).eq("is_current",true);
+    if(old.error){setSaving(false);setError("Existing assignment could not be closed: "+old.error.message);return;}
+    const result=await supabase.from("team_officials").insert(values);
+    if(result.error){setSaving(false);setError("Official could not be assigned: "+result.error.message);return;}
+    setSaving(false);setOfficialForm({team_id:"",user_id:"",role:"Team Official",start_date:"",end_date:""});setNotice("Team official assigned successfully.");await refresh();
+  }
+  async function deactivateOfficial(x){
+    if(!window.confirm("End "+(x.profiles?.full_name||"this official")+" assignment?"))return;
+    setSaving(true);setError("");setNotice("");
+    const supabase=getSupabase();
+    const result=await supabase.from("team_officials").update({is_current:false,end_date:new Date().toISOString().slice(0,10)}).eq("id",x.id);
+    if(result.error){setSaving(false);setError("Official assignment could not be ended: "+result.error.message);return;}
+    setSaving(false);setNotice("Official assignment ended.");await refresh();
+  }
 
   async function saveCoach(e){
     e.preventDefault();setSaving(true);setError("");setNotice("");
@@ -828,6 +851,25 @@ export default function ControlRoomPage(){
             <div><b>{x.full_name}</b><span>{x.role} · {current?.teams?.name||"Unassigned"} · {x.is_active?"ACTIVE":"inactive"}</span></div>
           </div>})}
           {!coaches.length&&<p className="muted">No coaches yet.</p>}
+        </div>
+      </div>}
+
+      {tab==="officials"&&<div className="stats-grid">
+        <form className="panel form-stack" onSubmit={saveOfficial}>
+          <h2>Team Officials</h2>
+          <p className="muted">Assign existing team-official accounts to local teams and manage their current assignments.</p>
+          <label>Team<select required value={officialForm.team_id} onChange={e=>setOfficialForm({...officialForm,team_id:e.target.value})}><option value="">Select team</option>{teams.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+          <label>Official account<select required value={officialForm.user_id} onChange={e=>setOfficialForm({...officialForm,user_id:e.target.value})}><option value="">Select official</option>{officialProfiles.map(x=><option key={x.id} value={x.id}>{x.full_name||"Unnamed official"}{x.phone?" · "+x.phone:""}</option>)}</select></label>
+          <label>Role<select value={officialForm.role} onChange={e=>setOfficialForm({...officialForm,role:e.target.value})}><option>Team Official</option><option>Club Secretary</option><option>Team Manager</option><option>Media Officer</option><option>Welfare Officer</option><option>Technical Official</option></select></label>
+          <label>Start date<input type="date" value={officialForm.start_date} onChange={e=>setOfficialForm({...officialForm,start_date:e.target.value})}/></label>
+          <label>End date<input type="date" value={officialForm.end_date} onChange={e=>setOfficialForm({...officialForm,end_date:e.target.value})}/></label>
+          <button className="button primary" disabled={saving}>{saving?"Saving…":"Assign official"}</button>
+        </form>
+        <div className="panel"><h2>Current Assignments</h2>
+          {teamOfficials.filter(x=>x.is_current).map(x=><div className="status-card" key={x.id}><b>{x.profiles?.full_name||"Team official"}</b><span>{x.teams?.name||"Team"} · {x.role} · {x.start_date||"Start date not set"}</span><button className="button danger" disabled={saving} onClick={()=>deactivateOfficial(x)}>End assignment</button></div>)}
+          {!teamOfficials.filter(x=>x.is_current).length&&<p className="muted">No current team-official assignments.</p>}
+          <h3 style={{marginTop:18}}>Assignment History</h3>
+          {teamOfficials.filter(x=>!x.is_current).slice(0,20).map(x=><div className="status-card" key={"history-"+x.id}><b>{x.profiles?.full_name||"Team official"}</b><span>{x.teams?.name||"Team"} · {x.role} · ended {x.end_date||"—"}</span></div>)}
         </div>
       </div>}
 
