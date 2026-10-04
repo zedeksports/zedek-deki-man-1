@@ -142,5 +142,5 @@ grant select,insert,update,delete on public.content_posts,public.surveys,public.
 drop policy if exists "public read active sponsors" on public.sponsors;
 create or replace view public.active_sponsors with (security_invoker=false) as
 select id,name,logo_url,website_url,tier,status,start_date,end_date from public.sponsors where status='active';
-revoke all on public.active_sponsors from public;
+revoke all on public.active_sponsors from anon,authenticated,public;
 grant select on public.active_sponsors to anon,authenticated;
