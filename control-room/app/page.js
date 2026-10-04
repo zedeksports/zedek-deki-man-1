@@ -688,7 +688,7 @@ export default function ControlRoomPage(){
     </div>)}{!reports.length&&<p className="muted">No reports in the queue.</p>}</div>
   </div>
 </div>}
-{tab==="community"&&<div className="form-stack">
+{tab==="community"?<div className="form-stack">
   <div className="panel">
     <h2>Football News & Community Updates</h2>
     <p className="muted">Publish official Zedek Sports stories and local football community updates to the public site.</p>
@@ -824,7 +824,7 @@ export default function ControlRoomPage(){
       </form>
     </div>
   </div>
-</div>}
+</div>:null}
 
 {tab==="teams"&&<div className="stats-grid">
         <form className="panel form-stack" onSubmit={saveTeam}>
