@@ -22,14 +22,14 @@ export default function ControlRoomPage(){
   const [coach,setCoach]=useState({team_id:"",full_name:"",date_of_birth:"",nationality:"",role:"Head Coach",image:null}); const [editingTeamId,setEditingTeamId]=useState(""); const [editingPlayerId,setEditingPlayerId]=useState("");
   const [saving,setSaving]=useState(false),[statsCompetitionId,setStatsCompetitionId]=useState(""),[statsSeasonId,setStatsSeasonId]=useState(""),[officialStats,setOfficialStats]=useState([]),[statsData,setStatsData]=useState({standings:[],scorers:[],recent:[],form:[]}),[h2hHome,setH2hHome]=useState(""),[h2hAway,setH2hAway]=useState(""),[h2hData,setH2hData]=useState([]),[h2hSummary,setH2hSummary]=useState(null), [reportMatch,setReportMatch]=useState(null), [report,setReport]=useState(null), [reports,setReports]=useState([]),[liveMatch,setLiveMatch]=useState(null),[events,setEvents]=useState([]),[matchStats,setMatchStats]=useState(null),[clock,setClock]=useState(0),[eventForm,setEventForm]=useState({type:"goal",team_id:"",player_id:"",secondary_player_id:"",minute:"",extra_minute:"",details:""}),[lineupMatch,setLineupMatch]=useState(null),[lineupTeam,setLineupTeam]=useState(""),[lineup,setLineup]=useState(null),[lineupPlayers,setLineupPlayers]=useState([]),[lineupLoading,setLineupLoading]=useState(false);
   const [contentPosts,setContentPosts]=useState([]),[editingContentId,setEditingContentId]=useState("");
-  const [contentForm,setContentForm]=useState({content_type:"news",title:"",slug:"",excerpt:"",body:"",category:"",status:"draft",featured:false,cover_image_url:""});
+  const [contentForm,setContentForm]=useState({content_type:"news",title:"",slug:"",excerpt:"",body:"",category:"",status:"draft",featured:false,cover_image_url:"",cover_image_file:null});
   const [surveys,setSurveys]=useState([]),[surveyQuestions,setSurveyQuestions]=useState([]),[surveyResponses,setSurveyResponses]=useState([]);
   const [surveyForm,setSurveyForm]=useState({title:"",description:"",status:"draft",starts_at:"",ends_at:""}),[editingSurveyId,setEditingSurveyId]=useState("");
   const [questionForm,setQuestionForm]=useState({survey_id:"",prompt:"",question_type:"text",options:"",required:false,sort_order:"1"});
   const [feedbackRows,setFeedbackRows]=useState([]),[feedbackFilter,setFeedbackFilter]=useState("new");
   const [sponsors,setSponsors]=useState([]),[editingSponsorId,setEditingSponsorId]=useState(""),[sponsorForm,setSponsorForm]=useState({name:"",logo_url:"",website_url:"",contact_name:"",contact_email:"",contact_phone:"",tier:"standard",status:"prospect",start_date:"",end_date:"",notes:""});
   const [deals,setDeals]=useState([]),[dealForm,setDealForm]=useState({sponsor_id:"",deal_name:"",amount:"",currency:"GHS",status:"proposed",start_date:"",end_date:"",placement:"",notes:""});
-  const [ads,setAds]=useState([]),[adForm,setAdForm]=useState({name:"",placement:"homepage",format:"banner",sponsor_id:"",image_url:"",target_url:"",active:false,start_date:"",end_date:""}),[editingAdId,setEditingAdId]=useState("");
+  const [ads,setAds]=useState([]),[adForm,setAdForm]=useState({name:"",placement:"homepage",format:"banner",sponsor_id:"",image_url:"",image_file:null,target_url:"",active:false,start_date:"",end_date:""}),[editingAdId,setEditingAdId]=useState("");
   const [transactions,setTransactions]=useState([]),[transactionForm,setTransactionForm]=useState({sponsor_id:"",deal_id:"",transaction_type:"payment",amount:"",currency:"GHS",status:"pending",transaction_date:new Date().toISOString().slice(0,10),reference:"",notes:""});
 
   useEffect(()=>{if(!liveMatch)return;const tick=()=>setClock(elapsed(liveMatch));tick();const id=setInterval(tick,1000);return()=>clearInterval(id);},[liveMatch]);
@@ -37,7 +37,7 @@ export default function ControlRoomPage(){
 
   async function refresh(){
     setError(""); const supabase=getSupabase(); if(!supabase)return;
-    const [a,b,c,d,coachRows,e,f,contentRows,surveyRows,questionRows,feedbackResult,sponsorRows,dealRows,adRows,transactionRows]=await Promise.all([
+    const [a,b,c,d,coachRows,e,f,contentRows,surveyRows,questionRows,responseRows,feedbackResult,sponsorRows,dealRows,adRows,transactionRows]=await Promise.all([
       supabase.from("competitions").select("*").order("name"),
       supabase.from("seasons").select("*, competitions(name)").order("created_at",{ascending:false}),
       supabase.from("teams").select("*").order("name"),
@@ -48,16 +48,17 @@ export default function ControlRoomPage(){
       supabase.from("content_posts").select("*").order("created_at",{ascending:false}),
       supabase.from("surveys").select("*").order("created_at",{ascending:false}),
       supabase.from("survey_questions").select("*").order("sort_order"),
+      supabase.from("survey_responses").select("*").order("submitted_at",{ascending:false}),
       supabase.from("user_feedback").select("*").order("created_at",{ascending:false}),
       supabase.from("sponsors").select("*").order("created_at",{ascending:false}),
       supabase.from("sponsorship_deals").select("*, sponsors(name)").order("created_at",{ascending:false}),
       supabase.from("ad_slots").select("*, sponsors(name)").order("created_at",{ascending:false}),
       supabase.from("monetization_transactions").select("*, sponsors(name), sponsorship_deals(deal_name)").order("transaction_date",{ascending:false}).order("created_at",{ascending:false})
     ]);
-    const bad=[a,b,c,d,coachRows,e,f,contentRows,surveyRows,questionRows,feedbackResult,sponsorRows,dealRows,adRows,transactionRows].find(x=>x.error); if(bad){setError(bad.error.message);return;}
+    const bad=[a,b,c,d,coachRows,e,f,contentRows,surveyRows,questionRows,responseRows,feedbackResult,sponsorRows,dealRows,adRows,transactionRows].find(x=>x.error); if(bad){setError(bad.error.message);return;}
     setCompetitions(a.data||[]);setSeasons(b.data||[]);setTeams(c.data||[]);setPlayers(d.data||[]);setCoaches(coachRows.data||[]);
     setStages(e.data||[]);setMatches(f.data||[]);
-    setContentPosts(contentRows.data||[]);setSurveys(surveyRows.data||[]);setSurveyQuestions(questionRows.data||[]);setFeedbackRows(feedbackResult.data||[]);
+    setContentPosts(contentRows.data||[]);setSurveys(surveyRows.data||[]);setSurveyQuestions(questionRows.data||[]);setSurveyResponses(responseRows.data||[]);setFeedbackRows(feedbackResult.data||[]);
     setSponsors(sponsorRows.data||[]);setDeals(dealRows.data||[]);setAds(adRows.data||[]);setTransactions(transactionRows.data||[]);
   }
 
@@ -391,8 +392,11 @@ export default function ControlRoomPage(){
   async function saveContent(e){
     e.preventDefault();setSaving(true);setError("");setNotice("");const supabase=getSupabase();
     const values={content_type:contentForm.content_type,title:contentForm.title.trim(),slug:(contentForm.slug.trim()||slugify(contentForm.title))+(editingContentId?"":"-"+Date.now()),excerpt:contentForm.excerpt.trim()||null,body:contentForm.body,category:contentForm.category.trim()||null,status:contentForm.status,featured:!!contentForm.featured,cover_image_url:contentForm.cover_image_url.trim()||null,author_id:user?.id||null,published_at:contentForm.status==="published"?new Date().toISOString():null,updated_at:new Date().toISOString()};
-    const r=editingContentId?await supabase.from("content_posts").update(values).eq("id",editingContentId):await supabase.from("content_posts").insert(values);
-    setSaving(false);if(r.error){setError(r.error.message);return;}setEditingContentId("");setContentForm({content_type:"news",title:"",slug:"",excerpt:"",body:"",category:"",status:"draft",featured:false,cover_image_url:""});setNotice("Content saved.");await refresh();
+    const r=editingContentId?await supabase.from("content_posts").update(values).eq("id",editingContentId).select("id").single():await supabase.from("content_posts").insert(values).select("id").single();
+    if(r.error){setSaving(false);setError(r.error.message);return;}
+    try{const cover_url=await uploadAsset(contentForm.cover_image_file,"content",r.data.id);if(cover_url){const u=await supabase.from("content_posts").update({cover_image_url:cover_url,updated_at:new Date().toISOString()}).eq("id",r.data.id);if(u.error)throw u.error;}}
+    catch(err){setSaving(false);setError("Content saved, but cover image upload failed: "+err.message);await refresh();return;}
+    setSaving(false);setEditingContentId("");setContentForm({content_type:"news",title:"",slug:"",excerpt:"",body:"",category:"",status:"draft",featured:false,cover_image_url:"",cover_image_file:null});setNotice("Content saved and published to the public feed.");await refresh();
   }
   async function saveSurvey(e){
     e.preventDefault();setSaving(true);setError("");setNotice("");const supabase=getSupabase();
@@ -423,9 +427,12 @@ export default function ControlRoomPage(){
   }
   async function saveAd(e){
     e.preventDefault();setSaving(true);setError("");setNotice("");const supabase=getSupabase();
-    const values={...adForm,name:adForm.name.trim(),image_url:adForm.image_url.trim()||null,target_url:adForm.target_url.trim()||null,sponsor_id:adForm.sponsor_id||null,start_date:adForm.start_date||null,end_date:adForm.end_date||null,updated_at:new Date().toISOString()};
-    const r=editingAdId?await supabase.from("ad_slots").update(values).eq("id",editingAdId):await supabase.from("ad_slots").insert(values);
-    setSaving(false);if(r.error){setError(r.error.message);return;}setEditingAdId("");setAdForm({name:"",placement:"homepage",format:"banner",sponsor_id:"",image_url:"",target_url:"",active:false,start_date:"",end_date:""});setNotice("Ad slot saved.");await refresh();
+    const values={name:adForm.name.trim(),placement:adForm.placement,format:adForm.format,sponsor_id:adForm.sponsor_id||null,image_url:adForm.image_url.trim()||null,target_url:adForm.target_url.trim()||null,active:!!adForm.active,start_date:adForm.start_date||null,end_date:adForm.end_date||null,updated_at:new Date().toISOString()};
+    const r=editingAdId?await supabase.from("ad_slots").update(values).eq("id",editingAdId).select("id").single():await supabase.from("ad_slots").insert(values).select("id").single();
+    if(r.error){setSaving(false);setError(r.error.message);return;}
+    try{const image_url=await uploadAsset(adForm.image_file,"ads",r.data.id);if(image_url){const u=await supabase.from("ad_slots").update({image_url,updated_at:new Date().toISOString()}).eq("id",r.data.id);if(u.error)throw u.error;}}
+    catch(err){setSaving(false);setError("Ad slot saved, but image upload failed: "+err.message);await refresh();return;}
+    setSaving(false);setEditingAdId("");setAdForm({name:"",placement:"homepage",format:"banner",sponsor_id:"",image_url:"",image_file:null,target_url:"",active:false,start_date:"",end_date:""});setNotice("Ad slot saved and available to the public feed.");await refresh();
   }
   async function saveTransaction(e){
     e.preventDefault();setSaving(true);setError("");setNotice("");const supabase=getSupabase();
@@ -641,12 +648,12 @@ export default function ControlRoomPage(){
       <label>Category<input placeholder="Match report, transfer, community..." value={contentForm.category} onChange={e=>setContentForm({...contentForm,category:e.target.value})}/></label>
       <label>Excerpt<textarea rows="3" value={contentForm.excerpt} onChange={e=>setContentForm({...contentForm,excerpt:e.target.value})}/></label>
       <label>Story / update body<textarea required rows="9" value={contentForm.body} onChange={e=>setContentForm({...contentForm,body:e.target.value})}/></label>
-      <label>Cover image URL<input value={contentForm.cover_image_url} onChange={e=>setContentForm({...contentForm,cover_image_url:e.target.value})}/></label>
+      <label>Cover image<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={e=>setContentForm({...contentForm,cover_image_file:e.target.files?.[0]||null})}/></label>{contentForm.cover_image_url&&<span className="muted">Current cover image is saved. Choose a new file to replace it.</span>}{contentForm.cover_image_file&&<span className="muted">Selected: {contentForm.cover_image_file.name}</span>}
       <label style={{display:"flex",gap:8,alignItems:"center"}}><input type="checkbox" checked={contentForm.featured} onChange={e=>setContentForm({...contentForm,featured:e.target.checked})}/> Featured</label>
       <button className="button primary" disabled={saving}>{editingContentId?"Update content":"Save content"}</button>
-      {editingContentId&&<button type="button" className="button" onClick={()=>{setEditingContentId("");setContentForm({content_type:"news",title:"",slug:"",excerpt:"",body:"",category:"",status:"draft",featured:false,cover_image_url:""});}}>Cancel edit</button>}
+      {editingContentId&&<button type="button" className="button" onClick={()=>{setEditingContentId("");setContentForm({content_type:"news",title:"",slug:"",excerpt:"",body:"",category:"",status:"draft",featured:false,cover_image_url:"",cover_image_file:null});}}>Cancel edit</button>}
     </form>
-    <div className="form-stack" style={{marginTop:18}}>{contentPosts.map(x=><div className="status-card" key={x.id}><b>{x.title}</b><span>{x.content_type==="news"?"NEWS":"COMMUNITY"} · {x.status} · {x.featured?"Featured":"Standard"}</span><p>{x.excerpt||x.body.slice(0,180)}</p><div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="button" onClick={()=>{setEditingContentId(x.id);setContentForm({content_type:x.content_type,title:x.title||"",slug:x.slug||"",excerpt:x.excerpt||"",body:x.body||"",category:x.category||"",status:x.status||"draft",featured:!!x.featured,cover_image_url:x.cover_image_url||""});}}>Edit</button>{x.status!=="archived"&&<button className="button danger" onClick={async()=>{const supabase=getSupabase();setSaving(true);const r=await supabase.from("content_posts").update({status:"archived",updated_at:new Date().toISOString()}).eq("id",x.id);setSaving(false);if(r.error)setError(r.error.message);else{setNotice("Content archived.");await refresh();}}}>Archive</button>}</div></div>)}{!contentPosts.length&&<p className="muted">No content yet.</p>}</div>
+    <div className="form-stack" style={{marginTop:18}}>{contentPosts.map(x=><div className="status-card" key={x.id}><b>{x.title}</b><span>{x.content_type==="news"?"NEWS":"COMMUNITY"} · {x.status} · {x.featured?"Featured":"Standard"}</span><p>{x.excerpt||x.body.slice(0,180)}</p><div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="button" onClick={()=>{setEditingContentId(x.id);setContentForm({content_type:x.content_type,title:x.title||"",slug:x.slug||"",excerpt:x.excerpt||"",body:x.body||"",category:x.category||"",status:x.status||"draft",featured:!!x.featured,cover_image_url:x.cover_image_url||"",cover_image_file:null});}}>Edit</button>{x.status!=="archived"&&<button className="button danger" onClick={async()=>{const supabase=getSupabase();setSaving(true);const r=await supabase.from("content_posts").update({status:"archived",updated_at:new Date().toISOString()}).eq("id",x.id);setSaving(false);if(r.error)setError(r.error.message);else{setNotice("Content archived.");await refresh();}}}>Archive</button>}</div></div>)}{!contentPosts.length&&<p className="muted">No content yet.</p>}</div>
   </div>
 
   <div className="stats-grid">
@@ -731,7 +738,7 @@ export default function ControlRoomPage(){
         <label>Placement<input value={adForm.placement} onChange={e=>setAdForm({...adForm,placement:e.target.value})}/></label>
         <label>Format<select value={adForm.format} onChange={e=>setAdForm({...adForm,format:e.target.value})}><option value="banner">Banner</option><option value="card">Card</option><option value="logo">Logo</option><option value="native">Native</option></select></label>
         <label>Sponsor<select value={adForm.sponsor_id} onChange={e=>setAdForm({...adForm,sponsor_id:e.target.value})}><option value="">None</option>{sponsors.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
-        <label>Image URL<input value={adForm.image_url} onChange={e=>setAdForm({...adForm,image_url:e.target.value})}/></label>
+        <label>Ad cover image<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={e=>setAdForm({...adForm,image_file:e.target.files?.[0]||null})}/></label>{adForm.image_url&&<span className="muted">Current ad image is saved. Choose a new file to replace it.</span>}{adForm.image_file&&<span className="muted">Selected: {adForm.image_file.name}</span>}
         <label>Target URL<input value={adForm.target_url} onChange={e=>setAdForm({...adForm,target_url:e.target.value})}/></label>
         <label style={{display:"flex",gap:8,alignItems:"center"}}><input type="checkbox" checked={adForm.active} onChange={e=>setAdForm({...adForm,active:e.target.checked})}/> Active</label>
         <button className="button primary" disabled={saving}>{editingAdId?"Update ad slot":"Add ad slot"}</button>
@@ -751,7 +758,7 @@ export default function ControlRoomPage(){
     <div className="form-stack" style={{marginTop:16}}>
       <h3>Active Sponsors</h3>{sponsors.map(x=><div className="status-card" key={x.id}><b>{x.name}</b><span>{x.tier} · {x.status} · {x.website_url||"No website"}</span><button className="button" onClick={()=>{setEditingSponsorId(x.id);setSponsorForm({name:x.name||"",logo_url:x.logo_url||"",website_url:x.website_url||"",contact_name:x.contact_name||"",contact_email:x.contact_email||"",contact_phone:x.contact_phone||"",tier:x.tier||"standard",status:x.status||"prospect",start_date:x.start_date||"",end_date:x.end_date||"",notes:x.notes||""});}}>Edit</button></div>)}
       <h3>Sponsorship Deals</h3>{deals.map(x=><div className="status-card" key={x.id}><b>{x.deal_name}</b><span>{x.sponsors?.name||"Sponsor"} · {x.currency} {Number(x.amount).toFixed(2)} · {x.status} · {x.placement||"Placement not set"}</span></div>)}{!deals.length&&<p className="muted">No sponsorship deals yet.</p>}
-      <h3>Ad Slots</h3>{ads.map(x=><div className="status-card" key={x.id}><b>{x.name}</b><span>{x.placement} · {x.format} · {x.active?"ACTIVE":"inactive"} · {x.sponsors?.name||"No sponsor"}</span><button className="button" onClick={()=>{setEditingAdId(x.id);setAdForm({name:x.name||"",placement:x.placement||"homepage",format:x.format||"banner",sponsor_id:x.sponsor_id||"",image_url:x.image_url||"",target_url:x.target_url||"",active:!!x.active,start_date:x.start_date||"",end_date:x.end_date||""});}}>Edit</button></div>)}{!ads.length&&<p className="muted">No ad slots yet.</p>}
+      <h3>Ad Slots</h3>{ads.map(x=><div className="status-card" key={x.id}><b>{x.name}</b><span>{x.placement} · {x.format} · {x.active?"ACTIVE":"inactive"} · {x.sponsors?.name||"No sponsor"}</span><button className="button" onClick={()=>{setEditingAdId(x.id);setAdForm({name:x.name||"",placement:x.placement||"homepage",format:x.format||"banner",sponsor_id:x.sponsor_id||"",image_url:x.image_url||"",image_file:null,target_url:x.target_url||"",active:!!x.active,start_date:x.start_date||"",end_date:x.end_date||""});}}>Edit</button></div>)}{!ads.length&&<p className="muted">No ad slots yet.</p>}
       <h3>Recent Revenue</h3>{transactions.slice(0,20).map(x=><div className="status-card" key={x.id}><b>{x.transaction_type.toUpperCase()} · {x.currency} {Number(x.amount).toFixed(2)}</b><span>{x.sponsors?.name||"Unassigned sponsor"} · {x.status} · {x.transaction_date}</span></div>)}{!transactions.length&&<p className="muted">No transactions yet.</p>}
     </div>
   </div>
