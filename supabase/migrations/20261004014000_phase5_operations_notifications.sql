@@ -30,3 +30,15 @@ on public.sponsors(status, start_date, end_date);
 
 create index if not exists ad_slots_public_placement_active_idx
 on public.ad_slots(placement, active, start_date, end_date);
+
+drop policy if exists "Admins can read favorite teams for broadcasts" on public.user_favorite_teams;
+create policy "Admins can read favorite teams for broadcasts"
+on public.user_favorite_teams
+for select to authenticated
+using ((select private.is_admin()));
+
+drop policy if exists "Admins can read favorite matches for broadcasts" on public.user_favorite_matches;
+create policy "Admins can read favorite matches for broadcasts"
+on public.user_favorite_matches
+for select to authenticated
+using ((select private.is_admin()));
