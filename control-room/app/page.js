@@ -373,7 +373,7 @@ export default function ControlRoomPage(){
   }
   async function saveSurvey(e){
     e.preventDefault();setSaving(true);setError("");setNotice("");const supabase=getSupabase();
-    const values={title:surveyForm.title.trim(),description:surveyForm.description.trim()||null,status:surveyForm.status,starts_at:surveyForm.starts_at||null,ends_at:surveyForm.ends_at||null,created_by:user?.id||null,updated_at:new Date().toISOString()};
+    const values={title:surveyForm.title.trim(),description:surveyForm.description.trim()||null,status:surveyForm.status,starts_at:surveyForm.starts_at?new Date(surveyForm.starts_at).toISOString():null,ends_at:surveyForm.ends_at?new Date(surveyForm.ends_at).toISOString():null,created_by:user?.id||null,updated_at:new Date().toISOString()};
     const r=editingSurveyId?await supabase.from("surveys").update(values).eq("id",editingSurveyId):await supabase.from("surveys").insert(values);
     setSaving(false);if(r.error){setError(r.error.message);return;}setEditingSurveyId("");setSurveyForm({title:"",description:"",status:"draft",starts_at:"",ends_at:""});setNotice("Survey saved.");await refresh();
   }
@@ -669,7 +669,7 @@ export default function ControlRoomPage(){
         <label>Contact email<input type="email" value={sponsorForm.contact_email} onChange={e=>setSponsorForm({...sponsorForm,contact_email:e.target.value})}/></label>
         <label>Tier<select value={sponsorForm.tier} onChange={e=>setSponsorForm({...sponsorForm,tier:e.target.value})}><option value="community">Community</option><option value="standard">Standard</option><option value="premium">Premium</option><option value="title">Title</option></select></label>
         <label>Status<select value={sponsorForm.status} onChange={e=>setSponsorForm({...sponsorForm,status:e.target.value})}><option value="prospect">Prospect</option><option value="active">Active</option><option value="paused">Paused</option><option value="ended">Ended</option></select></label>
-        <button className="button primary" disabled={saving} onClick={saveSponsor}>{editingSponsorId?"Update sponsor":"Add sponsor"}</button>
+        <button className="button primary" disabled={saving}>{editingSponsorId?"Update sponsor":"Add sponsor"}</button>
       </form>
       <form className="form-stack" onSubmit={saveDeal}>
         <h3>Sponsorship Deal</h3>
