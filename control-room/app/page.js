@@ -704,7 +704,8 @@ export default function ControlRoomPage(){
         <label>Type<select value={transactionForm.transaction_type} onChange={e=>setTransactionForm({...transactionForm,transaction_type:e.target.value})}><option value="payment">Payment</option><option value="invoice">Invoice</option><option value="refund">Refund</option><option value="adjustment">Adjustment</option></select></label>
         <label>Amount<input required type="number" step="0.01" value={transactionForm.amount} onChange={e=>setTransactionForm({...transactionForm,amount:e.target.value})}/></label>
         <label>Date<input type="date" value={transactionForm.transaction_date} onChange={e=>setTransactionForm({...transactionForm,transaction_date:e.target.value})}/></label>
-        <label>Status<select value={transactionForm.status} onChange={e=>setTransactionForm({...transactionForm,status:e.target.value})}><option value="pending">Pending</option><option value="confirmed">Confirmed</option><option value="cancelled">Cancelled</option></select></label>\n        <label>Reference<input value={transactionForm.reference} onChange={e=>setTransactionForm({...transactionForm,reference:e.target.value})}/></label>
+        <label>Status<select value={transactionForm.status} onChange={e=>setTransactionForm({...transactionForm,status:e.target.value})}><option value="pending">Pending</option><option value="confirmed">Confirmed</option><option value="cancelled">Cancelled</option></select></label>
+        <label>Reference<input value={transactionForm.reference} onChange={e=>setTransactionForm({...transactionForm,reference:e.target.value})}/></label>
         <button className="button primary" disabled={saving}>Record transaction</button>
       </form>
     </div>
