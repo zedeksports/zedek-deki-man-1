@@ -31,6 +31,8 @@ export default function ControlRoomPage(){
   const [deals,setDeals]=useState([]),[dealForm,setDealForm]=useState({sponsor_id:"",deal_name:"",amount:"",currency:"GHS",status:"proposed",start_date:"",end_date:"",placement:"",notes:""});
   const [ads,setAds]=useState([]),[adForm,setAdForm]=useState({name:"",placement:"homepage",format:"banner",sponsor_id:"",image_url:"",target_url:"",active:false,start_date:"",end_date:""}),[editingAdId,setEditingAdId]=useState("");
   const [transactions,setTransactions]=useState([]),[transactionForm,setTransactionForm]=useState({sponsor_id:"",deal_id:"",transaction_type:"payment",amount:"",currency:"GHS",status:"pending",transaction_date:new Date().toISOString().slice(0,10),reference:"",notes:""});
+  const [notificationForm,setNotificationForm]=useState({title:"",body:"",notification_type:"news",team_id:"",match_id:""});
+  const [notificationSaving,setNotificationSaving]=useState(false);
 
   useEffect(()=>{if(!liveMatch)return;const tick=()=>setClock(elapsed(liveMatch));tick();const id=setInterval(tick,1000);return()=>clearInterval(id);},[liveMatch]);
   useEffect(()=>{if(!loading&&tab==="stats")loadStats();},[loading,tab,statsCompetitionId,statsSeasonId]);
@@ -432,6 +434,28 @@ export default function ControlRoomPage(){
     const r=await supabase.from("monetization_transactions").insert({sponsor_id:transactionForm.sponsor_id||null,deal_id:transactionForm.deal_id||null,transaction_type:transactionForm.transaction_type,amount:Number(transactionForm.amount)||0,currency:transactionForm.currency.trim()||"GHS",status:transactionForm.status,transaction_date:transactionForm.transaction_date,reference:transactionForm.reference.trim()||null,notes:transactionForm.notes.trim()||null});
     setSaving(false);if(r.error){setError(r.error.message);return;}setTransactionForm({sponsor_id:"",deal_id:"",transaction_type:"payment",amount:"",currency:"GHS",status:"pending",transaction_date:new Date().toISOString().slice(0,10),reference:"",notes:""});setNotice("Revenue transaction saved.");await refresh();
   }
+  async function sendBroadcastNotification(e){
+    e.preventDefault();setNotificationSaving(true);setError("");setNotice("");const supabase=getSupabase();
+    const title=notificationForm.title.trim(),body=notificationForm.body.trim();
+    if(!title||!body){setNotificationSaving(false);setError("Notification title and message are required.");return;}
+    const {data:users,error:userError}=await supabase.from("profiles").select("id").eq("is_active",true);
+    if(userError){setNotificationSaving(false);setError(userError.message);return;}
+    const rows=(users||[]).map(x=>({user_id:x.id,notification_type:notificationForm.notification_type,title,body,team_id:notificationForm.team_id||null,match_id:notificationForm.match_id||null}));
+    if(!rows.length){setNotificationSaving(false);setError("There are no active user accounts to notify.");return;}
+    const r=await supabase.from("user_notifications").insert(rows);
+    setNotificationSaving(false);if(r.error){setError(r.error.message);return;}
+    setNotificationForm({title:"",body:"",notification_type:"news",team_id:"",match_id:""});setNotice("Notification broadcast to "+rows.length+" active user(s).");
+  }
+  async function moderateContent(id,status){
+    setSaving(true);setError("");setNotice("");const supabase=getSupabase();
+    const r=await supabase.from("content_posts").update({status,published_at:status==="published"?new Date().toISOString():null,updated_at:new Date().toISOString()}).eq("id",id);
+    setSaving(false);if(r.error){setError(r.error.message);return;}setNotice(status==="published"?"Content approved and published.":"Content moved out of publication.");await refresh();
+  }
+  async function closeSurvey(id){
+    setSaving(true);setError("");setNotice("");const supabase=getSupabase();
+    const r=await supabase.from("surveys").update({status:"closed",updated_at:new Date().toISOString()}).eq("id",id);
+    setSaving(false);if(r.error){setError(r.error.message);return;}setNotice("Survey closed.");await refresh();
+  }
   async function signOut(){const supabase=getSupabase();if(supabase)await supabase.auth.signOut();window.location.href="/login";}
 
   if(loading)return <main className="auth-page"><div className="panel">Loading ZEDEK Sports Control Room...</div></main>;
@@ -738,8 +762,31 @@ export default function ControlRoomPage(){
       <h3>Ad Slots</h3>{ads.map(x=><div className="status-card" key={x.id}><b>{x.name}</b><span>{x.placement} · {x.format} · {x.active?"ACTIVE":"inactive"} · {x.sponsors?.name||"No sponsor"}</span><button className="button" onClick={()=>{setEditingAdId(x.id);setAdForm({name:x.name||"",placement:x.placement||"homepage",format:x.format||"banner",sponsor_id:x.sponsor_id||"",image_url:x.image_url||"",target_url:x.target_url||"",active:!!x.active,start_date:x.start_date||"",end_date:x.end_date||""});}}>Edit</button></div>)}{!ads.length&&<p className="muted">No ad slots yet.</p>}
       <h3>Recent Revenue</h3>{transactions.slice(0,20).map(x=><div className="status-card" key={x.id}><b>{x.transaction_type.toUpperCase()} · {x.currency} {Number(x.amount).toFixed(2)}</b><span>{x.sponsors?.name||"Unassigned sponsor"} · {x.status} · {x.transaction_date}</span></div>)}{!transactions.length&&<p className="muted">No transactions yet.</p>}
     </div>
+  <div className="stats-grid">
+    <div className="panel">
+      <h2>Moderation & Publishing Queue</h2>
+      <p className="muted">Review public stories, community updates, survey status and incoming feedback before they remain visible or are closed.</p>
+      <div className="form-stack">
+        {contentPosts.filter(x=>x.status!=="published").slice(0,12).map(x=><div className="status-card" key={"mod-"+x.id}><b>{x.title}</b><span>{x.content_type==="news"?"NEWS":"COMMUNITY"} · {x.status}</span><div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="button primary" onClick={()=>moderateContent(x.id,"published")}>Approve & publish</button><button className="button danger" onClick={()=>moderateContent(x.id,"archived")}>Archive</button></div></div>)}
+        {!contentPosts.filter(x=>x.status!=="published").length&&<p className="muted">No unpublished content is waiting for moderation.</p>}
+        {feedbackRows.filter(x=>x.status==="new").slice(0,12).map(x=><div className="status-card" key={"fb-"+x.id}><b>{x.subject||"Community feedback"}</b><span>{x.category} · {new Date(x.created_at).toLocaleString()}</span><p>{x.message}</p><div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="button" onClick={()=>updateFeedback(x,"reviewing")}>Start review</button><button className="button primary" onClick={()=>updateFeedback(x,"resolved")}>Resolve</button><button className="button danger" onClick={()=>updateFeedback(x,"closed")}>Close</button></div></div>)}
+        {!feedbackRows.filter(x=>x.status==="new").length&&<p className="muted">No new feedback is waiting for review.</p>}
+        {surveys.filter(x=>x.status==="published").slice(0,8).map(x=><div className="status-card" key={"survey-"+x.id}><b>{x.title}</b><span>Survey · {x.status} · {surveyQuestions.filter(q=>q.survey_id===x.id).length} question(s)</span><button className="button danger" onClick={()=>closeSurvey(x.id)}>Close survey</button></div>)}
+      </div>
+    </div>
+    <div className="panel">
+      <h2>Notification Centre</h2>
+      <p className="muted">Send an official announcement to every active Zedek Sports account. Match/team targeting remains available for future event-specific campaigns.</p>
+      <form className="form-stack" onSubmit={sendBroadcastNotification}>
+        <label>Notification type<select value={notificationForm.notification_type} onChange={e=>setNotificationForm({...notificationForm,notification_type:e.target.value})}><option value="news">News</option><option value="community">Community update</option><option value="announcement">Announcement</option><option value="sponsor">Sponsor</option></select></label>
+        <label>Title<input required value={notificationForm.title} onChange={e=>setNotificationForm({...notificationForm,title:e.target.value})}/></label>
+        <label>Message<textarea required rows="5" value={notificationForm.body} onChange={e=>setNotificationForm({...notificationForm,body:e.target.value})}/></label>
+        <label>Team (optional)<select value={notificationForm.team_id} onChange={e=>setNotificationForm({...notificationForm,team_id:e.target.value})}><option value="">All teams</option>{teams.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
+        <label>Match (optional)<select value={notificationForm.match_id} onChange={e=>setNotificationForm({...notificationForm,match_id:e.target.value})}><option value="">No match link</option>{matches.slice(0,50).map(x=><option key={x.id} value={x.id}>{x.home?.name||"Home"} vs {x.away?.name||"Away"} · {fmtDate(x.scheduled_at)}</option>)}</select></label>
+        <button className="button primary" disabled={notificationSaving}>{notificationSaving?"Broadcasting…":"Broadcast notification"}</button>
+      </form>
+    </div>
   </div>
-</div>}
 
 {tab==="teams"&&<div className="stats-grid">
         <form className="panel form-stack" onSubmit={saveTeam}>
