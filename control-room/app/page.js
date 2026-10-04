@@ -255,7 +255,7 @@ export default function ControlRoomPage(){
     setError(""); setNotice("");
     const selectedSeasonIds=statsCompetitionId?seasons.filter(x=>x.competition_id===statsCompetitionId).map(x=>x.id):[];
     if(statsCompetitionId&&!selectedSeasonIds.length){setStatsData({standings:[],scorers:[],recent:[],form:[]});setOfficialStats([]);setNotice("No seasons are registered for this competition yet.");return;}
-    let matchQuery=supabase.from("matches").select("id,season_id,stage_id,scheduled_at,status,home_score,away_score,home_team_id,away_team_id,home:teams!matches_home_team_id_fkey(id,name)").eq("status","verified").order("scheduled_at",{ascending:false});
+    let matchQuery=supabase.from("matches").select("id,season_id,stage_id,scheduled_at,status,home_score,away_score,home_team_id,away_team_id,home:teams!matches_home_team_id_fkey(id,name),away:teams!matches_away_team_id_fkey(id,name)").eq("status","verified").order("scheduled_at",{ascending:false});
     if(statsSeasonId)matchQuery=matchQuery.eq("season_id",statsSeasonId);
     else if(statsCompetitionId)matchQuery=matchQuery.in("season_id",selectedSeasonIds);
     const m=await matchQuery;
@@ -595,7 +595,7 @@ export default function ControlRoomPage(){
         <div className="panel">
           <h2>Squad Selection</h2>
           {!lineupTeam?<p className="muted">Select a match and team.</p>:<div className="form-stack">
-            {players.filter(p=>p.team_id===lineupTeam).map(p=>{const row=lineupPlayers.find(x=>x.player_id===p.id);return <div key={p.id} className="status-card" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}><span><b>{p.full_name}</b><br/>#{p.shirt_number||"—"} · {p.position||"Position not set"}</span><div style={{display:"flex",gap:6}}><button className={"button "+(row?.role==="starter"?"primary":"")} onClick={()=>{if(row?.role==="starter")setLineupPlayers(lineupPlayers.filter(x=>x.player_id!==p.id));else {setLineupPlayers(lineupPlayers.filter(x=>x.player_id!==p.id).concat({player_id:p.id,role:"starter",shirt_number:p.shirt_number||null,position:p.position||null}));}}}>Starter</button><button className={"button "+(row?.role==="substitute"?"primary":"")} onClick={()=>{if(row?.role==="substitute")setLineupPlayers(lineupPlayers.filter(x=>x.player_id!==p.id));else {setLineupPlayers(lineupPlayers.filter(x=>x.player_id!==p.id).concat({player_id:p.id,role:"substitute",shirt_number:p.shirt_number||null,position:p.position||null}));}}}>Sub</button></div></div>})}
+            {players.filter(p=>p.team_id===lineupTeam&&p.is_active!==false).map(p=>{const row=lineupPlayers.find(x=>x.player_id===p.id);return <div key={p.id} className="status-card" style={{display:"flex",justifyContent:"space-between",alignItems:"center",gap:10}}><span><b>{p.full_name}</b><br/>#{p.shirt_number||"—"} · {p.position||"Position not set"}</span><div style={{display:"flex",gap:6}}><button className={"button "+(row?.role==="starter"?"primary":"")} onClick={()=>{if(row?.role==="starter")setLineupPlayers(lineupPlayers.filter(x=>x.player_id!==p.id));else {setLineupPlayers(lineupPlayers.filter(x=>x.player_id!==p.id).concat({player_id:p.id,role:"starter",shirt_number:p.shirt_number||null,position:p.position||null}));}}}>Starter</button><button className={"button "+(row?.role==="substitute"?"primary":"")} onClick={()=>{if(row?.role==="substitute")setLineupPlayers(lineupPlayers.filter(x=>x.player_id!==p.id));else {setLineupPlayers(lineupPlayers.filter(x=>x.player_id!==p.id).concat({player_id:p.id,role:"substitute",shirt_number:p.shirt_number||null,position:p.position||null}));}}}>Sub</button></div></div>})}
             <p className="muted">Starters: {lineupPlayers.filter(x=>x.role==="starter").length}/11 · Substitutes: {lineupPlayers.filter(x=>x.role==="substitute").length}</p>
           </div>}
         </div>
@@ -678,6 +678,22 @@ export default function ControlRoomPage(){
       <label style={{display:"flex",gap:8,alignItems:"center"}}><input type="checkbox" checked={questionForm.required} onChange={e=>setQuestionForm({...questionForm,required:e.target.checked})}/> Required</label>
       <button className="button primary" disabled={saving}>Add question</button>
     </form>
+  </div>
+
+  <div className="panel">
+    <h2>Survey Responses</h2>
+    <p className="muted">Review submitted responses from registered users. Answers are shown exactly as submitted.</p>
+    <div className="form-stack">
+      {surveyResponses.map(x=>{
+        const survey=surveys.find(s=>s.id===x.survey_id);
+        return <div className="status-card" key={x.id}>
+          <b>{survey?.title||"Survey response"}</b>
+          <span>{x.submitted_at?new Date(x.submitted_at).toLocaleString():"Submitted"} · User {x.user_id}</span>
+          <pre style={{whiteSpace:"pre-wrap",margin:"8px 0 0"}}>{JSON.stringify(x.answers||{},null,2)}</pre>
+        </div>;
+      })}
+      {!surveyResponses.length&&<p className="muted">No survey responses yet.</p>}
+    </div>
   </div>
 
   <div className="panel">
