@@ -30,7 +30,7 @@ export default function ControlRoomPage(){
   const [questionForm,setQuestionForm]=useState({survey_id:"",prompt:"",question_type:"text",options:"",required:false,sort_order:"1"});
   const [feedbackRows,setFeedbackRows]=useState([]),[feedbackFilter,setFeedbackFilter]=useState("new");
   const [sponsors,setSponsors]=useState([]),[editingSponsorId,setEditingSponsorId]=useState(""),[sponsorForm,setSponsorForm]=useState({name:"",logo_url:"",website_url:"",contact_name:"",contact_email:"",contact_phone:"",tier:"standard",status:"prospect",start_date:"",end_date:"",notes:""});
-  const [deals,setDeals]=useState([]),[dealForm,setDealForm]=useState({sponsor_id:"",deal_name:"",amount:"",currency:"GHS",status:"proposed",start_date:"",end_date:"",placement:"",notes:""});
+  const [deals,setDeals]=useState([]),[editingDealId,setEditingDealId]=useState(""),[dealForm,setDealForm]=useState({sponsor_id:"",deal_name:"",amount:"",currency:"GHS",status:"proposed",start_date:"",end_date:"",placement:"",notes:""});
   const [ads,setAds]=useState([]),[adForm,setAdForm]=useState({name:"",placement:"homepage",format:"banner",sponsor_id:"",image_url:"",target_url:"",active:false,start_date:"",end_date:""}),[editingAdId,setEditingAdId]=useState("");
   const [transactions,setTransactions]=useState([]),[transactionForm,setTransactionForm]=useState({sponsor_id:"",deal_id:"",transaction_type:"payment",amount:"",currency:"GHS",status:"pending",transaction_date:new Date().toISOString().slice(0,10),reference:"",notes:""});
   const [notificationForm,setNotificationForm]=useState({title:"",body:"",notification_type:"news",team_id:"",match_id:""});
@@ -436,6 +436,10 @@ export default function ControlRoomPage(){
     const supabase=getSupabase();setSaving(true);setError("");const values={status,admin_note:row.admin_note||null,resolved_at:status==="resolved"?new Date().toISOString():null};
     const r=await supabase.from("user_feedback").update(values).eq("id",row.id);setSaving(false);if(r.error){setError(r.error.message);return;}setNotice("Feedback updated.");await refresh();
   }
+  async function saveFeedbackNote(row,note){
+    setSaving(true);setError("");setNotice("");const supabase=getSupabase();const r=await supabase.from("user_feedback").update({admin_note:note.trim()||null}).eq("id",row.id);
+    setSaving(false);if(r.error){setError(r.error.message);return;}setNotice("Feedback note saved.");await refresh();
+  }
   async function saveSponsor(e){
     e.preventDefault();setSaving(true);setError("");setNotice("");const supabase=getSupabase();
     const values={...sponsorForm,name:sponsorForm.name.trim(),logo_url:sponsorForm.logo_url.trim()||null,website_url:sponsorForm.website_url.trim()||null,contact_name:sponsorForm.contact_name.trim()||null,contact_email:sponsorForm.contact_email.trim()||null,contact_phone:sponsorForm.contact_phone.trim()||null,start_date:sponsorForm.start_date||null,end_date:sponsorForm.end_date||null,notes:sponsorForm.notes.trim()||null,updated_at:new Date().toISOString()};
@@ -444,9 +448,12 @@ export default function ControlRoomPage(){
   }
   async function saveDeal(e){
     e.preventDefault();setSaving(true);setError("");setNotice("");const supabase=getSupabase();
-    const r=await supabase.from("sponsorship_deals").insert({sponsor_id:dealForm.sponsor_id,deal_name:dealForm.deal_name.trim(),amount:Number(dealForm.amount)||0,currency:dealForm.currency.trim()||"GHS",status:dealForm.status,start_date:dealForm.start_date||null,end_date:dealForm.end_date||null,placement:dealForm.placement.trim()||null,notes:dealForm.notes.trim()||null});
-    setSaving(false);if(r.error){setError(r.error.message);return;}setDealForm({sponsor_id:"",deal_name:"",amount:"",currency:"GHS",status:"proposed",start_date:"",end_date:"",placement:"",notes:""});setNotice("Sponsorship deal saved.");await refresh();
+    const values={sponsor_id:dealForm.sponsor_id,deal_name:dealForm.deal_name.trim(),amount:Number(dealForm.amount)||0,currency:dealForm.currency.trim()||"GHS",status:dealForm.status,start_date:dealForm.start_date||null,end_date:dealForm.end_date||null,placement:dealForm.placement.trim()||null,notes:dealForm.notes.trim()||null,updated_at:new Date().toISOString()};
+    const r=editingDealId?await supabase.from("sponsorship_deals").update(values).eq("id",editingDealId):await supabase.from("sponsorship_deals").insert(values);
+    setSaving(false);if(r.error){setError(r.error.message);return;}setEditingDealId("");setDealForm({sponsor_id:"",deal_name:"",amount:"",currency:"GHS",status:"proposed",start_date:"",end_date:"",placement:"",notes:""});setNotice(editingDealId?"Sponsorship deal updated.":"Sponsorship deal saved.");await refresh();
   }
+  function editSponsor(x){setEditingSponsorId(x.id);setSponsorForm({...x,name:x.name||"",logo_url:x.logo_url||"",website_url:x.website_url||"",contact_name:x.contact_name||"",contact_email:x.contact_email||"",contact_phone:x.contact_phone||"",tier:x.tier||"standard",status:x.status||"prospect",start_date:x.start_date||"",end_date:x.end_date||"",notes:x.notes||""});}
+  function editDeal(x){setEditingDealId(x.id);setDealForm({sponsor_id:x.sponsor_id||"",deal_name:x.deal_name||"",amount:x.amount??"",currency:x.currency||"GHS",status:x.status||"proposed",start_date:x.start_date||"",end_date:x.end_date||"",placement:x.placement||"",notes:x.notes||""});}
   async function saveAd(e){
     e.preventDefault();setSaving(true);setError("");setNotice("");const supabase=getSupabase();
     const values={...adForm,name:adForm.name.trim(),image_url:adForm.image_url.trim()||null,target_url:adForm.target_url.trim()||null,sponsor_id:adForm.sponsor_id||null,start_date:adForm.start_date||null,end_date:adForm.end_date||null,updated_at:new Date().toISOString()};
@@ -733,14 +740,9 @@ export default function ControlRoomPage(){
         <div className="form-stack" style={{marginTop:12}}>
           {feedbackRows.filter(x=>x.status===feedbackFilter).map(x=>(
             <div className="status-card" key={x.id}>
-              <b>{x.subject||"Feedback"}</b>
-              <span>{x.category} · {x.rating?x.rating+"/5":"No rating"}</span>
-              <p>{x.message}</p>
-              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-                <button className="button" onClick={()=>updateFeedback(x,"reviewing")}>Review</button>
-                <button className="button primary" onClick={()=>updateFeedback(x,"resolved")}>Resolve</button>
-                <button className="button danger" onClick={()=>updateFeedback(x,"closed")}>Close</button>
-              </div>
+              <b>{x.subject||"Feedback"}</b><span>{x.category} · {x.rating?x.rating+"/5":"No rating"}</span><p>{x.message}</p>
+              <label>Admin note<textarea rows="2" value={x.admin_note||""} onChange={e=>setFeedbackRows(feedbackRows.map(r=>r.id===x.id?{...r,admin_note:e.target.value}:r))}/></label>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="button" onClick={()=>saveFeedbackNote(x,x.admin_note||"")}>Save note</button><button className="button" onClick={()=>updateFeedback(x,"reviewing")}>Review</button><button className="button primary" onClick={()=>updateFeedback(x,"resolved")}>Resolve</button><button className="button danger" onClick={()=>updateFeedback(x,"closed")}>Close</button></div>
             </div>
           ))}
           {!feedbackRows.filter(x=>x.status===feedbackFilter).length&&<p className="muted">No feedback in this queue.</p>}
@@ -752,12 +754,13 @@ export default function ControlRoomPage(){
           <label>Title<input required value={surveyForm.title} onChange={e=>setSurveyForm({...surveyForm,title:e.target.value})}/></label>
           <label>Description<textarea rows="3" value={surveyForm.description} onChange={e=>setSurveyForm({...surveyForm,description:e.target.value})}/></label>
           <label>Status<select value={surveyForm.status} onChange={e=>setSurveyForm({...surveyForm,status:e.target.value})}><option value="draft">Draft</option><option value="published">Published</option><option value="closed">Closed</option></select></label>
+          <label>Starts<input type="datetime-local" value={surveyForm.starts_at} onChange={e=>setSurveyForm({...surveyForm,starts_at:e.target.value})}/></label><label>Ends<input type="datetime-local" value={surveyForm.ends_at} onChange={e=>setSurveyForm({...surveyForm,ends_at:e.target.value})}/></label>
           <button className="button primary" disabled={saving}>{editingSurveyId?"Update survey":"Create survey"}</button>
         </form>
         <div className="form-stack" style={{marginTop:12}}>
           {surveys.map(x=>(
             <div className="status-card" key={x.id}>
-              <b>{x.title}</b><span>{x.status} · {surveyQuestions.filter(q=>q.survey_id===x.id).length} questions</span>
+              <b>{x.title}</b><span>{x.status} · {surveyQuestions.filter(q=>q.survey_id===x.id).length} questions · {surveyResponses.filter(r=>r.survey_id===x.id).length} responses</span>
               {x.status==="published"&&<button className="button danger" onClick={()=>closeSurvey(x.id)}>Close survey</button>}
             </div>
           ))}
@@ -770,29 +773,38 @@ export default function ControlRoomPage(){
       <form className="form-stack" onSubmit={saveQuestion}>
         <label>Survey<select required value={questionForm.survey_id} onChange={e=>setQuestionForm({...questionForm,survey_id:e.target.value})}><option value="">Select survey</option>{surveys.map(x=><option key={x.id} value={x.id}>{x.title}</option>)}</select></label>
         <label>Question<input required value={questionForm.prompt} onChange={e=>setQuestionForm({...questionForm,prompt:e.target.value})}/></label>
-        <label>Type<select value={questionForm.question_type} onChange={e=>setQuestionForm({...questionForm,question_type:e.target.value})}><option value="text">Text</option><option value="rating">Rating</option><option value="single_choice">Single choice</option><option value="multiple_choice">Multiple choice</option></select></label>
+        <label>Type<select value={questionForm.question_type} onChange={e=>setQuestionForm({...questionForm,question_type:e.target.value})}><option value="text">Text</option><option value="rating">Rating</option><option value="single">Single choice</option><option value="multi">Multiple choice</option></select></label>
         <label>Options<input value={questionForm.options} onChange={e=>setQuestionForm({...questionForm,options:e.target.value})}/></label>
         <button className="button primary" disabled={saving}>Add question</button>
       </form>
       <div className="form-stack" style={{marginTop:12}}>
-        {surveyQuestions.map(q=><div className="status-card" key={q.id}><b>{q.prompt}</b><span>{q.question_type} · {q.required?"Required":"Optional"}</span></div>)}
+        {surveyQuestions.map(q=><div className="status-card" key={q.id}><b>{q.prompt}</b><span>{q.question_type==="single"?"Single choice":q.question_type==="multi"?"Multiple choice":q.question_type} · {q.required?"Required":"Optional"}{q.options?.length?" · "+q.options.join(", "):""}</span></div>)}
       </div>
     </div>
 
     <div className="panel">
+      <h2>Survey Responses</h2>
+      {surveys.map(s=>{const rows=surveyResponses.filter(r=>r.survey_id===s.id);return <div className="panel" key={s.id}><h3>{s.title} · {rows.length} responses</h3>{rows.length?rows.slice(0,50).map(r=><div className="status-card" key={r.id}><b>Submitted {fmtDate(r.submitted_at)}</b><pre style={{whiteSpace:"pre-wrap",margin:0,fontFamily:"inherit"}}>{JSON.stringify(r.answers,null,2)}</pre></div>):<p className="muted">No responses yet.</p>}</div>})}
+    </div>
+    <div className="panel">
       <h2>Sponsors & Monetization</h2>
       <div className="stats-grid">
         <form className="form-stack" onSubmit={saveSponsor}>
-          <h3>Sponsor</h3>
+          <h3>{editingSponsorId?"Edit sponsor":"Sponsor"}</h3>
           <label>Name<input required value={sponsorForm.name} onChange={e=>setSponsorForm({...sponsorForm,name:e.target.value})}/></label>
+          <label>Logo URL<input value={sponsorForm.logo_url} onChange={e=>setSponsorForm({...sponsorForm,logo_url:e.target.value})}/></label>
           <label>Website<input value={sponsorForm.website_url} onChange={e=>setSponsorForm({...sponsorForm,website_url:e.target.value})}/></label>
+          <label>Contact name<input value={sponsorForm.contact_name} onChange={e=>setSponsorForm({...sponsorForm,contact_name:e.target.value})}/></label>
+          <label>Contact email<input type="email" value={sponsorForm.contact_email} onChange={e=>setSponsorForm({...sponsorForm,contact_email:e.target.value})}/></label>
+          <label>Contact phone<input value={sponsorForm.contact_phone} onChange={e=>setSponsorForm({...sponsorForm,contact_phone:e.target.value})}/></label>
           <label>Tier<select value={sponsorForm.tier} onChange={e=>setSponsorForm({...sponsorForm,tier:e.target.value})}><option value="community">Community</option><option value="standard">Standard</option><option value="premium">Premium</option><option value="title">Title</option></select></label>
           <label>Status<select value={sponsorForm.status} onChange={e=>setSponsorForm({...sponsorForm,status:e.target.value})}><option value="prospect">Prospect</option><option value="active">Active</option><option value="paused">Paused</option><option value="ended">Ended</option></select></label>
+          <label>Start date<input type="date" value={sponsorForm.start_date} onChange={e=>setSponsorForm({...sponsorForm,start_date:e.target.value})}/></label><label>End date<input type="date" value={sponsorForm.end_date} onChange={e=>setSponsorForm({...sponsorForm,end_date:e.target.value})}/></label><label>Notes<textarea rows="2" value={sponsorForm.notes} onChange={e=>setSponsorForm({...sponsorForm,notes:e.target.value})}/></label>
           <button className="button primary" disabled={saving}>{editingSponsorId?"Update sponsor":"Add sponsor"}</button>
         </form>
         <div className="panel">
           <h3>Active Sponsors</h3>
-          {sponsors.map(x=><div className="status-card" key={x.id}><b>{x.name}</b><span>{x.tier} · {x.status}</span></div>)}
+          {sponsors.map(x=><div className="status-card" key={x.id}><b>{x.name}</b><span>{x.tier} · {x.status} · {x.contact_name||"No contact"}</span><button className="button" onClick={()=>editSponsor(x)}>Edit</button></div>)}
           {!sponsors.length&&<p className="muted">No sponsors yet.</p>}
         </div>
       </div>
@@ -801,19 +813,23 @@ export default function ControlRoomPage(){
           <h3>Sponsorship Deal</h3>
           <label>Sponsor<select required value={dealForm.sponsor_id} onChange={e=>setDealForm({...dealForm,sponsor_id:e.target.value})}><option value="">Select sponsor</option>{sponsors.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
           <label>Deal name<input required value={dealForm.deal_name} onChange={e=>setDealForm({...dealForm,deal_name:e.target.value})}/></label>
-          <label>Amount<input type="number" step="0.01" value={dealForm.amount} onChange={e=>setDealForm({...dealForm,amount:e.target.value})}/></label>
-          <button className="button primary" disabled={saving}>Save deal</button>
+          <label>Amount<input required type="number" step="0.01" value={dealForm.amount} onChange={e=>setDealForm({...dealForm,amount:e.target.value})}/></label><label>Currency<input value={dealForm.currency} onChange={e=>setDealForm({...dealForm,currency:e.target.value.toUpperCase()})}/></label><label>Status<select value={dealForm.status} onChange={e=>setDealForm({...dealForm,status:e.target.value})}><option value="proposed">Proposed</option><option value="active">Active</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select></label><label>Start<input type="date" value={dealForm.start_date} onChange={e=>setDealForm({...dealForm,start_date:e.target.value})}/></label><label>End<input type="date" value={dealForm.end_date} onChange={e=>setDealForm({...dealForm,end_date:e.target.value})}/></label><label>Placement<input value={dealForm.placement} onChange={e=>setDealForm({...dealForm,placement:e.target.value})}/></label><label>Notes<textarea value={dealForm.notes} onChange={e=>setDealForm({...dealForm,notes:e.target.value})}/></label>
+          <button className="button primary" disabled={saving}>{editingDealId?"Update deal":"Save deal"}</button>
         </form>
         <form className="form-stack" onSubmit={saveTransaction}>
           <h3>Revenue Ledger</h3>
+          <label>Sponsor<select value={transactionForm.sponsor_id} onChange={e=>setTransactionForm({...transactionForm,sponsor_id:e.target.value})}><option value="">No sponsor</option>{sponsors.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label><label>Deal<select value={transactionForm.deal_id} onChange={e=>setTransactionForm({...transactionForm,deal_id:e.target.value})}><option value="">No deal</option>{deals.map(x=><option key={x.id} value={x.id}>{x.deal_name}</option>)}</select></label>
           <label>Type<select value={transactionForm.transaction_type} onChange={e=>setTransactionForm({...transactionForm,transaction_type:e.target.value})}><option value="payment">Payment</option><option value="invoice">Invoice</option><option value="refund">Refund</option><option value="adjustment">Adjustment</option></select></label>
           <label>Amount<input required type="number" step="0.01" value={transactionForm.amount} onChange={e=>setTransactionForm({...transactionForm,amount:e.target.value})}/></label>
-          <label>Status<select value={transactionForm.status} onChange={e=>setTransactionForm({...transactionForm,status:e.target.value})}><option value="pending">Pending</option><option value="confirmed">Confirmed</option><option value="cancelled">Cancelled</option></select></label>
+          <label>Status<select value={transactionForm.status} onChange={e=>setTransactionForm({...transactionForm,status:e.target.value})}><option value="pending">Pending</option><option value="confirmed">Confirmed</option><option value="cancelled">Cancelled</option></select></label><label>Date<input type="date" value={transactionForm.transaction_date} onChange={e=>setTransactionForm({...transactionForm,transaction_date:e.target.value})}/></label><label>Reference<input value={transactionForm.reference} onChange={e=>setTransactionForm({...transactionForm,reference:e.target.value})}/></label><label>Notes<textarea value={transactionForm.notes} onChange={e=>setTransactionForm({...transactionForm,notes:e.target.value})}/></label>
           <button className="button primary" disabled={saving}>Record transaction</button>
         </form>
       </div>
     </div>
 
+    <div className="panel">
+      <h2>Ad Slot Manager</h2><form className="form-stack" onSubmit={saveAd}><label>Name<input required value={adForm.name} onChange={e=>setAdForm({...adForm,name:e.target.value})}/></label><label>Placement<input required value={adForm.placement} onChange={e=>setAdForm({...adForm,placement:e.target.value})}/></label><label>Format<select value={adForm.format} onChange={e=>setAdForm({...adForm,format:e.target.value})}><option value="banner">Banner</option><option value="card">Card</option><option value="logo">Logo</option><option value="native">Native</option></select></label><label>Sponsor<select value={adForm.sponsor_id} onChange={e=>setAdForm({...adForm,sponsor_id:e.target.value})}><option value="">No sponsor</option>{sponsors.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label><label>Image URL<input value={adForm.image_url} onChange={e=>setAdForm({...adForm,image_url:e.target.value})}/></label><label>Target URL<input value={adForm.target_url} onChange={e=>setAdForm({...adForm,target_url:e.target.value})}/></label><label>Start<input type="date" value={adForm.start_date} onChange={e=>setAdForm({...adForm,start_date:e.target.value})}/></label><label>End<input type="date" value={adForm.end_date} onChange={e=>setAdForm({...adForm,end_date:e.target.value})}/></label><label><input type="checkbox" checked={adForm.active} onChange={e=>setAdForm({...adForm,active:e.target.checked})}/> Active</label><button className="button primary" disabled={saving}>{editingAdId?"Update ad slot":"Create ad slot"}</button></form><div className="form-stack">{ads.map(x=><div className="status-card" key={x.id}><b>{x.name}</b><span>{x.placement} · {x.format} · {x.sponsors?.name||"No sponsor"} · {x.active?"ACTIVE":"inactive"}</span><button className="button" onClick={()=>{setEditingAdId(x.id);setAdForm({name:x.name||"",placement:x.placement||"homepage",format:x.format||"banner",sponsor_id:x.sponsor_id||"",image_url:x.image_url||"",target_url:x.target_url||"",active:!!x.active,start_date:x.start_date||"",end_date:x.end_date||""});}}>Edit</button></div>)}</div>
+    </div>
     <div className="panel">
       <h2>Notification Centre</h2>
       <form className="form-stack" onSubmit={sendBroadcastNotification}>
