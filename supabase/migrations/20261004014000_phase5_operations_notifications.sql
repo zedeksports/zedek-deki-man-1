@@ -18,9 +18,9 @@ for select
 to authenticated
 using ((select private.is_admin()) and is_active=true);
 
-revoke execute on function public.notify_lineup_followers() from public;
-revoke execute on function public.notify_match_event_followers() from public;
-revoke execute on function public.notify_match_followers(uuid,text,text,text) from public;
+revoke execute on function public.notify_lineup_followers() from public, anon, authenticated;
+revoke execute on function public.notify_match_event_followers() from public, anon, authenticated;
+revoke execute on function public.notify_match_followers(uuid,text,text,text) from public, anon, authenticated;
 
 create index if not exists user_notifications_user_read_created_idx
 on public.user_notifications(user_id, read_at, created_at desc);
