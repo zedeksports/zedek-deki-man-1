@@ -119,7 +119,7 @@ drop policy if exists "admins manage feedback" on public.user_feedback;
 create policy "admins manage feedback" on public.user_feedback for all to authenticated using ((select private.is_admin())) with check ((select private.is_admin()));
 
 drop policy if exists "public read active sponsors" on public.sponsors;
-create policy "public read active sponsors" on public.sponsors for select to anon,authenticated using (status='active');
+create policy "public read active sponsors" on public.sponsors for select to anon using (status='active');
 drop policy if exists "admins manage sponsors" on public.sponsors;
 create policy "admins manage sponsors" on public.sponsors for all to authenticated using ((select private.is_admin())) with check ((select private.is_admin()));
 
@@ -139,8 +139,5 @@ revoke all on public.monetization_transactions from anon;
 revoke all on table public.content_posts,public.surveys,public.survey_questions,public.survey_responses,public.user_feedback,public.sponsors,public.sponsorship_deals,public.ad_slots,public.monetization_transactions from anon,authenticated;
 grant select on public.content_posts,public.surveys,public.survey_questions,public.ad_slots to anon;
 grant select,insert,update,delete on public.content_posts,public.surveys,public.survey_questions,public.survey_responses,public.user_feedback,public.sponsors,public.sponsorship_deals,public.ad_slots,public.monetization_transactions to authenticated;
-drop policy if exists "public read active sponsors" on public.sponsors;
-create or replace view public.active_sponsors with (security_invoker=false) as
-select id,name,logo_url,website_url,tier,status,start_date,end_date from public.sponsors where status='active';
-revoke all on public.active_sponsors from anon,authenticated,public;
-grant select on public.active_sponsors to anon,authenticated;
+revoke all on table public.sponsors from anon;
+grant select (id,name,logo_url,website_url,tier,status,start_date,end_date) on public.sponsors to anon;
