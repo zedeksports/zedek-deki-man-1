@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "../lib/supabase/browser";
 
-const TABS=["overview","competitions","seasons","stages","fixtures","live","lineups","review","stats","community","teams","players","coaches","officials"];
+const TABS=["overview","competitions","seasons","stages","fixtures","live","lineups","review","stats","publishing","community","teams","players","coaches","officials"];
 const STAGE_TYPES=["league","group","knockout","quarter_final","semi_final","final"];
 
 function getSupabase(){if(typeof window==="undefined")return null;return createSupabaseBrowserClient();}
@@ -35,13 +35,16 @@ export default function ControlRoomPage(){
   const [transactions,setTransactions]=useState([]),[transactionForm,setTransactionForm]=useState({sponsor_id:"",deal_id:"",transaction_type:"payment",amount:"",currency:"GHS",status:"pending",transaction_date:new Date().toISOString().slice(0,10),reference:"",notes:""});
   const [notificationForm,setNotificationForm]=useState({title:"",body:"",notification_type:"news",team_id:"",match_id:""});
   const [notificationSaving,setNotificationSaving]=useState(false);
+  const [previewRows,setPreviewRows]=useState([]),[channelRows,setChannelRows]=useState([]),[streamAds,setStreamAds]=useState([]);
+  const [previewForm,setPreviewForm]=useState({match_id:"",headline:"",summary:"",key_storylines:"",form_note:"",h2h_note:"",venue_note:"",status:"draft"});
+  const [channelForm,setChannelForm]=useState({match_id:"",channel_type:"live_stream",name:"",provider:"",url:"",is_primary:false,active:true,starts_at:"",ends_at:""});
 
   useEffect(()=>{if(!liveMatch)return;const tick=()=>setClock(elapsed(liveMatch));tick();const id=setInterval(tick,1000);return()=>clearInterval(id);},[liveMatch]);
   useEffect(()=>{if(!loading&&tab==="stats")loadStats();},[loading,tab,statsCompetitionId,statsSeasonId]);
 
   async function refresh(){
     setError(""); const supabase=getSupabase(); if(!supabase)return;
-    const [a,b,c,d,coachRows,officialProfileRows,officialAssignmentRows,e,f,contentRows,surveyRows,questionRows,feedbackResult,sponsorRows,dealRows,adRows,transactionRows]=await Promise.all([
+    const [a,b,c,d,coachRows,officialProfileRows,officialAssignmentRows,e,f,contentRows,surveyRows,questionRows,feedbackResult,sponsorRows,dealRows,adRows,transactionRows,previewRowsResult,channelRowsResult,streamAdsResult]=await Promise.all([
       supabase.from("competitions").select("*").order("name"),
       supabase.from("seasons").select("*, competitions(name)").order("created_at",{ascending:false}),
       supabase.from("teams").select("*").order("name"),
@@ -58,13 +61,16 @@ export default function ControlRoomPage(){
       supabase.from("sponsors").select("*").order("created_at",{ascending:false}),
       supabase.from("sponsorship_deals").select("*, sponsors(name)").order("created_at",{ascending:false}),
       supabase.from("ad_slots").select("*, sponsors(name)").order("created_at",{ascending:false}),
-      supabase.from("monetization_transactions").select("*, sponsors(name), sponsorship_deals(deal_name)").order("transaction_date",{ascending:false}).order("created_at",{ascending:false})
+      supabase.from("monetization_transactions").select("*, sponsors(name), sponsorship_deals(deal_name)").order("transaction_date",{ascending:false}).order("created_at",{ascending:false}),
+      supabase.from("match_previews").select("*").order("updated_at",{ascending:false}),
+      supabase.from("match_channels").select("*, matches(home:teams!matches_home_team_id_fkey(name),away:teams!matches_away_team_id_fkey(name))").order("created_at",{ascending:false}),
+      supabase.from("match_stream_ads").select("*, ad_slots(name,placement,format,sponsors(name)), matches(home:teams!matches_home_team_id_fkey(name),away:teams!matches_away_team_id_fkey(name))").order("priority").order("created_at",{ascending:false})
     ]);
-    const bad=[a,b,c,d,coachRows,officialProfileRows,officialAssignmentRows,e,f,contentRows,surveyRows,questionRows,feedbackResult,sponsorRows,dealRows,adRows,transactionRows].find(x=>x.error); if(bad){setError(bad.error.message);return;}
+    const bad=[a,b,c,d,coachRows,officialProfileRows,officialAssignmentRows,e,f,contentRows,surveyRows,questionRows,feedbackResult,sponsorRows,dealRows,adRows,transactionRows,previewRowsResult,channelRowsResult,streamAdsResult].find(x=>x.error); if(bad){setError(bad.error.message);return;}
     setCompetitions(a.data||[]);setSeasons(b.data||[]);setTeams(c.data||[]);setPlayers(d.data||[]);setCoaches(coachRows.data||[]);setOfficialProfiles(officialProfileRows.data||[]);setTeamOfficials(officialAssignmentRows.data||[]);
     setStages(e.data||[]);setMatches(f.data||[]);
     setContentPosts(contentRows.data||[]);setSurveys(surveyRows.data||[]);setSurveyQuestions(questionRows.data||[]);setFeedbackRows(feedbackResult.data||[]);
-    setSponsors(sponsorRows.data||[]);setDeals(dealRows.data||[]);setAds(adRows.data||[]);setTransactions(transactionRows.data||[]);
+    setSponsors(sponsorRows.data||[]);setDeals(dealRows.data||[]);setAds(adRows.data||[]);setTransactions(transactionRows.data||[]);setPreviewRows(previewRowsResult.data||[]);setChannelRows(channelRowsResult.data||[]);setStreamAds(streamAdsResult.data||[]);
   }
 
   useEffect(()=>{let mounted=true;
@@ -373,6 +379,41 @@ export default function ControlRoomPage(){
     if(result.error){setError(result.error.message);return;}setNotice("Fixture updated.");await refresh();
   }
   function slugify(value){return value.toLowerCase().trim().replace(/[^a-z0-9]+/g,"-").replace(/^-+|-+$/g,"");}
+  async function savePreview(e){
+    e.preventDefault();setSaving(true);setError("");setNotice("");const supabase=getSupabase();
+    if(!previewForm.match_id){setSaving(false);setError("Select a match for the preview.");return;}
+    const values={...previewForm,headline:previewForm.headline.trim()||null,summary:previewForm.summary.trim()||null,key_storylines:previewForm.key_storylines.trim()||null,form_note:previewForm.form_note.trim()||null,h2h_note:previewForm.h2h_note.trim()||null,venue_note:previewForm.venue_note.trim()||null,author_id:user?.id||null,published_at:previewForm.status==="published"?new Date().toISOString():null,updated_at:new Date().toISOString()};
+    const r=await supabase.from("match_previews").upsert(values,{onConflict:"match_id"}).select("*").single();
+    setSaving(false);if(r.error){setError(r.error.message);return;}setPreviewForm({match_id:"",headline:"",summary:"",key_storylines:"",form_note:"",h2h_note:"",venue_note:"",status:"draft"});setNotice(previewForm.status==="published"?"Match preview published.":"Match preview saved as draft.");await refresh();
+  }
+  async function publishPreview(id,status){
+    setSaving(true);setError("");setNotice("");const supabase=getSupabase();
+    const r=await supabase.from("match_previews").update({status,published_at:status==="published"?new Date().toISOString():null,updated_at:new Date().toISOString()}).eq("id",id);
+    setSaving(false);if(r.error){setError(r.error.message);return;}setNotice(status==="published"?"Match preview published.":"Match preview moved to draft.");await refresh();
+  }
+  async function saveChannel(e){
+    e.preventDefault();setSaving(true);setError("");setNotice("");const supabase=getSupabase();
+    if(!channelForm.match_id||!channelForm.name.trim()){setSaving(false);setError("Match and channel name are required.");return;}
+    const values={...channelForm,name:channelForm.name.trim(),provider:channelForm.provider.trim()||null,url:channelForm.url.trim()||null,starts_at:channelForm.starts_at?new Date(channelForm.starts_at).toISOString():null,ends_at:channelForm.ends_at?new Date(channelForm.ends_at).toISOString():null,updated_at:new Date().toISOString()};
+    if(values.is_primary){const primary=await supabase.from("match_channels").update({is_primary:false}).eq("match_id",values.match_id);if(primary.error){setSaving(false);setError(primary.error.message);return;}}
+    const r=await supabase.from("match_channels").insert(values);
+    setSaving(false);if(r.error){setError(r.error.message);return;}setChannelForm({match_id:"",channel_type:"live_stream",name:"",provider:"",url:"",is_primary:false,active:true,starts_at:"",ends_at:""});setNotice("Match channel published.");await refresh();
+  }
+  async function toggleChannel(row){
+    setSaving(true);setError("");const supabase=getSupabase();const r=await supabase.from("match_channels").update({active:!row.active,updated_at:new Date().toISOString()}).eq("id",row.id);
+    setSaving(false);if(r.error){setError(r.error.message);return;}await refresh();
+  }
+  async function attachStreamAd(e){
+    e.preventDefault();setSaving(true);setError("");setNotice("");const supabase=getSupabase();
+    const form=e.currentTarget,matchId=form.elements.match_id.value,adId=form.elements.ad_slot_id.value,position=form.elements.position.value;
+    if(!matchId||!adId){setSaving(false);setError("Select both a match and an ad slot.");return;}
+    const r=await supabase.from("match_stream_ads").upsert({match_id:matchId,ad_slot_id:adId,position,active:true},{onConflict:"match_id,ad_slot_id,position"});
+    setSaving(false);if(r.error){setError(r.error.message);return;}form.reset();setNotice("Live-stream ad attached to the match.");await refresh();
+  }
+  async function toggleStreamAd(row){
+    setSaving(true);setError("");const supabase=getSupabase();const r=await supabase.from("match_stream_ads").update({active:!row.active,updated_at:new Date().toISOString()}).eq("id",row.id);
+    setSaving(false);if(r.error){setError(r.error.message);return;}await refresh();
+  }
   async function saveContent(e){
     e.preventDefault();setSaving(true);setError("");setNotice("");const supabase=getSupabase();
     const values={content_type:contentForm.content_type,title:contentForm.title.trim(),slug:(slugify(contentForm.slug.trim()||contentForm.title))+(editingContentId?"":"-"+Date.now()),excerpt:contentForm.excerpt.trim()||null,body:contentForm.body,category:contentForm.category.trim()||null,status:contentForm.status,featured:!!contentForm.featured,cover_image_url:contentForm.cover_image_url.trim()||null,author_id:user?.id||null,published_at:contentForm.status==="published"?new Date().toISOString():null,updated_at:new Date().toISOString()};
@@ -654,6 +695,44 @@ export default function ControlRoomPage(){
     </div>)}{!reports.length&&<p className="muted">No reports in the queue.</p>}</div>
   </div>
 </div>}
+{tab==="publishing"&&(
+  <div className="form-stack">
+    <div className="stats-grid">
+      <div className="panel">
+        <h2>Prematch Summary · Preview Publishing</h2><p className="muted">Create and publish the public match preview without touching live match controls.</p>
+        <form className="form-stack" onSubmit={savePreview}>
+          <label>Match<select required value={previewForm.match_id} onChange={e=>setPreviewForm({...previewForm,match_id:e.target.value})}><option value="">Select match</option>{matches.map(x=><option key={x.id} value={x.id}>{x.home?.name||"Home"} vs {x.away?.name||"Away"} · {fmtDate(x.scheduled_at)}</option>)}</select></label>
+          <label>Headline<input value={previewForm.headline} onChange={e=>setPreviewForm({...previewForm,headline:e.target.value})}/></label>
+          <label>Summary<textarea rows="5" value={previewForm.summary} onChange={e=>setPreviewForm({...previewForm,summary:e.target.value})}/></label>
+          <label>Key storylines<textarea rows="4" value={previewForm.key_storylines} onChange={e=>setPreviewForm({...previewForm,key_storylines:e.target.value})}/></label>
+          <label>Form note<textarea rows="3" value={previewForm.form_note} onChange={e=>setPreviewForm({...previewForm,form_note:e.target.value})}/></label>
+          <label>H2H note<textarea rows="3" value={previewForm.h2h_note} onChange={e=>setPreviewForm({...previewForm,h2h_note:e.target.value})}/></label>
+          <label>Venue note<textarea rows="3" value={previewForm.venue_note} onChange={e=>setPreviewForm({...previewForm,venue_note:e.target.value})}/></label>
+          <label>Status<select value={previewForm.status} onChange={e=>setPreviewForm({...previewForm,status:e.target.value})}><option value="draft">Draft</option><option value="published">Publish now</option><option value="archived">Archive</option></select></label>
+          <button className="button primary" disabled={saving}>Save preview</button>
+        </form>
+      </div>
+      <div className="panel"><h2>Published Previews</h2><div className="form-stack">{previewRows.map(x=>{const m=matches.find(r=>r.id===x.match_id);return <div className="status-card" key={x.id}><b>{x.headline||"Match preview"}</b><span>{m?.home?.name||"Home"} vs {m?.away?.name||"Away"} · {x.status}</span><p>{x.summary||"No summary yet."}</p><div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{x.status!=="published"&&<button className="button primary" onClick={()=>publishPreview(x.id,"published")}>Publish</button>}{x.status==="published"&&<button className="button" onClick={()=>publishPreview(x.id,"draft")}>Unpublish</button>}</div></div>})}{!previewRows.length&&<p className="muted">No match previews yet.</p>}</div></div>
+    </div>
+    <div className="stats-grid">
+      <div className="panel"><h2>Match Channels</h2><p className="muted">Publish where fans can follow the match: live stream, TV, radio or social.</p>
+        <form className="form-stack" onSubmit={saveChannel}>
+          <label>Match<select required value={channelForm.match_id} onChange={e=>setChannelForm({...channelForm,match_id:e.target.value})}><option value="">Select match</option>{matches.map(x=><option key={x.id} value={x.id}>{x.home?.name||"Home"} vs {x.away?.name||"Away"} · {fmtDate(x.scheduled_at)}</option>)}</select></label>
+          <label>Channel type<select value={channelForm.channel_type} onChange={e=>setChannelForm({...channelForm,channel_type:e.target.value})}><option value="live_stream">Live stream</option><option value="tv">TV</option><option value="radio">Radio</option><option value="social">Social</option></select></label>
+          <label>Channel name<input required value={channelForm.name} onChange={e=>setChannelForm({...channelForm,name:e.target.value})}/></label>
+          <label>Provider<input value={channelForm.provider} onChange={e=>setChannelForm({...channelForm,provider:e.target.value})}/></label>
+          <label>URL<input type="url" value={channelForm.url} onChange={e=>setChannelForm({...channelForm,url:e.target.value})}/></label>
+          <label>Starts<input type="datetime-local" value={channelForm.starts_at} onChange={e=>setChannelForm({...channelForm,starts_at:e.target.value})}/></label>
+          <label>Ends<input type="datetime-local" value={channelForm.ends_at} onChange={e=>setChannelForm({...channelForm,ends_at:e.target.value})}/></label>
+          <label><input type="checkbox" checked={channelForm.is_primary} onChange={e=>setChannelForm({...channelForm,is_primary:e.target.checked})}/> Primary channel</label>
+          <label><input type="checkbox" checked={channelForm.active} onChange={e=>setChannelForm({...channelForm,active:e.target.checked})}/> Published / active</label>
+          <button className="button primary" disabled={saving}>Publish channel</button>
+        </form>
+      </div>
+      <div className="panel"><h2>Published Channels</h2><div className="form-stack">{channelRows.map(x=><div className="status-card" key={x.id}><b>{x.name}</b><span>{x.channel_type} · {x.matches?.home?.name||"Home"} vs {x.matches?.away?.name||"Away"} · {x.active?"ACTIVE":"OFF"}</span>{x.url&&<a className="button" href={x.url} target="_blank" rel="noreferrer">Open channel</a>}<button className="button" onClick={()=>toggleChannel(x)}>{x.active?"Disable":"Enable"}</button></div>)}{!channelRows.length&&<p className="muted">No channels published yet.</p>}</div></div>
+    </div>
+  </div>
+)}
 {tab==="community"&&(
   <div className="form-stack">
     <div className="stats-grid">
@@ -788,6 +867,16 @@ export default function ControlRoomPage(){
 
     <div className="panel">
       <h2>Ad Slot Manager</h2><form className="form-stack" onSubmit={saveAd}><label>Name<input required value={adForm.name} onChange={e=>setAdForm({...adForm,name:e.target.value})}/></label><label>Placement<input required value={adForm.placement} onChange={e=>setAdForm({...adForm,placement:e.target.value})}/></label><label>Format<select value={adForm.format} onChange={e=>setAdForm({...adForm,format:e.target.value})}><option value="banner">Banner</option><option value="card">Card</option><option value="logo">Logo</option><option value="native">Native</option></select></label><label>Sponsor<select value={adForm.sponsor_id} onChange={e=>setAdForm({...adForm,sponsor_id:e.target.value})}><option value="">No sponsor</option>{sponsors.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label><label>Image URL<input value={adForm.image_url} onChange={e=>setAdForm({...adForm,image_url:e.target.value})}/></label><label>Target URL<input value={adForm.target_url} onChange={e=>setAdForm({...adForm,target_url:e.target.value})}/></label><label>Start<input type="date" value={adForm.start_date} onChange={e=>setAdForm({...adForm,start_date:e.target.value})}/></label><label>End<input type="date" value={adForm.end_date} onChange={e=>setAdForm({...adForm,end_date:e.target.value})}/></label><label><input type="checkbox" checked={adForm.active} onChange={e=>setAdForm({...adForm,active:e.target.checked})}/> Active</label><button className="button primary" disabled={saving}>{editingAdId?"Update ad slot":"Create ad slot"}</button></form><div className="form-stack">{ads.map(x=><div className="status-card" key={x.id}><b>{x.name}</b><span>{x.placement} · {x.format} · {x.sponsors?.name||"No sponsor"} · {x.active?"ACTIVE":"inactive"}</span><button className="button" onClick={()=>{setEditingAdId(x.id);setAdForm({name:x.name||"",placement:x.placement||"homepage",format:x.format||"banner",sponsor_id:x.sponsor_id||"",image_url:x.image_url||"",target_url:x.target_url||"",active:!!x.active,start_date:x.start_date||"",end_date:x.end_date||""});}}>Edit</button></div>)}</div>
+    </div>
+    <div className="panel">
+      <h2>Live Streaming Ads · Monetization</h2><p className="muted">Attach monetized ad inventory to a specific live-stream match and control placement.</p>
+      <form className="form-stack" onSubmit={attachStreamAd}>
+        <label>Match<select name="match_id" required><option value="">Select match</option>{matches.map(x=><option key={x.id} value={x.id}>{x.home?.name||"Home"} vs {x.away?.name||"Away"} · {fmtDate(x.scheduled_at)}</option>)}</select></label>
+        <label>Ad slot<select name="ad_slot_id" required><option value="">Select ad slot</option>{ads.map(x=><option key={x.id} value={x.id}>{x.name} · {x.sponsors?.name||"No sponsor"} · {x.placement}</option>)}</select></label>
+        <label>Position<select name="position"><option value="pre_roll">Pre-roll</option><option value="mid_roll">Mid-roll</option><option value="post_roll">Post-roll</option><option value="overlay">Overlay</option></select></label>
+        <button className="button primary" disabled={saving}>Attach ad to live stream</button>
+      </form>
+      <div className="form-stack" style={{marginTop:12}}>{streamAds.map(x=><div className="status-card" key={x.id}><b>{x.ad_slots?.name||"Ad"}</b><span>{x.matches?.home?.name||"Home"} vs {x.matches?.away?.name||"Away"} · {x.position} · {x.active?"ACTIVE":"OFF"} · {x.ad_slots?.sponsors?.name||"No sponsor"}</span><button className="button" onClick={()=>toggleStreamAd(x)}>{x.active?"Disable":"Enable"}</button></div>)}{!streamAds.length&&<p className="muted">No live-stream ads attached yet.</p>}</div>
     </div>
     <div className="panel">
       <h2>Notification Centre</h2>
