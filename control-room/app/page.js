@@ -407,12 +407,15 @@ export default function ControlRoomPage(){
     const m=await supabase.from("matches").update({status:"verified"}).eq("id",r.match_id);
     if(m.error){setError(m.error.message);setSaving(false);return;}
     await supabase.from("match_reports").update({status:"verified",updated_at:new Date().toISOString()}).eq("id",r.id);
-    setSaving(false);setNotice("Official result verified and locked.");await loadReports();
+    await supabase.from("reporter_assignments").update({status:"completed",completed_at:new Date().toISOString()}).eq("match_id",r.match_id).eq("status","under_review");
+    setSaving(false);setNotice("Official result verified and locked; reporter assignment completed.");await loadReports();
   }
   async function rejectReport(r){
     const supabase=getSupabase();setSaving(true);setError("");setNotice("");
     const x=await supabase.from("match_reports").update({status:"rejected",updated_at:new Date().toISOString()}).eq("id",r.id);
-    setSaving(false);if(x.error){setError(x.error.message);return;}setNotice("Report rejected and returned for correction.");await loadReports();
+    if(x.error){setSaving(false);setError(x.error.message);return;}
+    const a=await supabase.from("reporter_assignments").update({status:"in_progress",completed_at:null}).eq("match_id",r.match_id).eq("status","under_review");
+    setSaving(false);if(a.error){setError(a.error.message);return;}setNotice("Report rejected and returned for correction.");await loadReports();
   }
   async function loadLineup(matchId,teamId){
     const supabase=getSupabase(); if(!supabase)return;
@@ -731,7 +734,7 @@ export default function ControlRoomPage(){
         </form>
         <div className="panel"><h2>Fixture list</h2>{matches.map(x=><div className="status-card" key={x.id}>
           <b>{x.home?.name||"Home"} vs {x.away?.name||"Away"}</b><span>{x.seasons?.name||"Season"} · {x.stages?.name||"Stage"} · {fmtDate(x.scheduled_at)} · {x.venue||"Venue TBC"}</span>
-          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}><button className="button" onClick={()=>updateMatch(x.id,{status:"scheduled"})}>Scheduled</button><button className="button" onClick={()=>clockAction(x,"start")}>Start live</button><button className="button" onClick={()=>updateMatch(x.id,{status:"postponed"})}>Postpone</button><button className="button" onClick={()=>updateMatch(x.id,{status:"cancelled"})}>Cancel</button></div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>{x.status==="verified"?<span className="muted">Official result locked</span>:<><button className="button" onClick={()=>updateMatch(x.id,{status:"scheduled"})}>Scheduled</button><button className="button" onClick={()=>clockAction(x,"start")}>Start live</button><button className="button" onClick={()=>updateMatch(x.id,{status:"postponed"})}>Postpone</button><button className="button" onClick={()=>updateMatch(x.id,{status:"cancelled"})}>Cancel</button></>}</div>
         </div>)}{!matches.length&&<p className="muted">No fixtures yet.</p>}</div>
       </div>}
 
