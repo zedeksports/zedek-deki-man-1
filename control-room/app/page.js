@@ -38,7 +38,7 @@ function RegistrationConsent({kind,confirmed,setConfirmed,authorityType,setAutho
 export default function ControlRoomPage(){
   const [loading,setLoading]=useState(true),[user,setUser]=useState(null),[profile,setProfile]=useState(null);
   const [tab,setTab]=useState("overview"),[error,setError]=useState(""),[notice,setNotice]=useState("");
-  const [competitions,setCompetitions]=useState([]),[seasons,setSeasons]=useState([]),[teams,setTeams]=useState([]),[players,setPlayers]=useState([]),[coaches,setCoaches]=useState([]),[officialProfiles,setOfficialProfiles]=useState([]),[teamOfficials,setTeamOfficials]=useState([]),[stages,setStages]=useState([]),[matches,setMatches]=useState([]);
+  const [competitions,setCompetitions]=useState([]),[seasons,setSeasons]=useState([]),[teams,setTeams]=useState([]),[players,setPlayers]=useState([]),[coaches,setCoaches]=useState([]),[officialProfiles,setOfficialProfiles]=useState([]),[candidateProfiles,setCandidateProfiles]=useState([]),[teamOfficials,setTeamOfficials]=useState([]),[stages,setStages]=useState([]),[matches,setMatches]=useState([]);
   const [competition,setCompetition]=useState({id:"",name:"",code:"",location:"",format:"league",image:null}); const [editingCompetitionId,setEditingCompetitionId]=useState("");
   const [season,setSeason]=useState({competition_id:"",name:"",year:"",start_date:"",end_date:""});
   const [stage,setStage]=useState({season_id:"",name:"",stage_type:"league",stage_order:"1",is_active:true});
@@ -71,13 +71,14 @@ export default function ControlRoomPage(){
 
   async function refresh(){
     setError(""); const supabase=getSupabase(); if(!supabase)return;
-    const [a,b,c,d,coachRows,officialProfileRows,officialAssignmentRows,e,f,contentRows,surveyRows,questionRows,feedbackResult,sponsorRows,dealRows,adRows,transactionRows,previewRowsResult,channelRowsResult,streamAdsResult]=await Promise.all([
+    const [a,b,c,d,coachRows,officialProfileRows,candidateProfileRows,officialAssignmentRows,e,f,contentRows,surveyRows,questionRows,feedbackResult,sponsorRows,dealRows,adRows,transactionRows,previewRowsResult,channelRowsResult,streamAdsResult]=await Promise.all([
       supabase.from("competitions").select("*").order("name"),
       supabase.from("seasons").select("*, competitions(name)").order("created_at",{ascending:false}),
       supabase.from("teams").select("*").order("name"),
       supabase.from("players").select("*, teams(name)").order("full_name"),
       supabase.from("coaches").select("*, team_coaches(team_id,is_current,teams(name))").order("full_name"),
       supabase.from("profiles").select("id,full_name,phone,role,is_active").eq("role","team_official").eq("is_active",true).order("full_name"),
+      supabase.from("profiles").select("id,full_name,phone,role,is_active").eq("role","public_user").eq("is_active",true).order("full_name"),
       supabase.from("team_officials").select("*, teams(name), profiles(id,full_name,phone,is_active,role)").order("created_at",{ascending:false}),
       supabase.from("stages").select("*, seasons(name, competitions(name))").order("season_id").order("stage_order"),
       supabase.from("matches").select("*, home:teams!matches_home_team_id_fkey(name), away:teams!matches_away_team_id_fkey(name), seasons(name), stages(name)").order("scheduled_at",{ascending:true}),
@@ -94,7 +95,7 @@ export default function ControlRoomPage(){
       supabase.from("match_stream_ads").select("*, ad_slots(name,placement,format,sponsors(name)), matches(home:teams!matches_home_team_id_fkey(name),away:teams!matches_away_team_id_fkey(name))").order("priority").order("created_at",{ascending:false})
     ]);
     const bad=[a,b,c,d,coachRows,officialProfileRows,officialAssignmentRows,e,f,contentRows,surveyRows,questionRows,feedbackResult,sponsorRows,dealRows,adRows,transactionRows,previewRowsResult,channelRowsResult,streamAdsResult].find(x=>x.error); if(bad){setError(bad.error.message);return;}
-    setCompetitions(a.data||[]);setSeasons(b.data||[]);setTeams(c.data||[]);setPlayers(d.data||[]);setCoaches(coachRows.data||[]);setOfficialProfiles(officialProfileRows.data||[]);setTeamOfficials(officialAssignmentRows.data||[]);
+    setCompetitions(a.data||[]);setSeasons(b.data||[]);setTeams(c.data||[]);setPlayers(d.data||[]);setCoaches(coachRows.data||[]);setOfficialProfiles(officialProfileRows.data||[]);setCandidateProfiles(candidateProfileRows.data||[]);setTeamOfficials(officialAssignmentRows.data||[]);
     setStages(e.data||[]);setMatches(f.data||[]);
     setContentPosts(contentRows.data||[]);setSurveys(surveyRows.data||[]);setSurveyQuestions(questionRows.data||[]);setFeedbackRows(feedbackResult.data||[]);
     setSponsors(sponsorRows.data||[]);setDeals(dealRows.data||[]);setAds(adRows.data||[]);setTransactions(transactionRows.data||[]);setPreviewRows(previewRowsResult.data||[]);setChannelRows(channelRowsResult.data||[]);setStreamAds(streamAdsResult.data||[]);
@@ -193,6 +194,17 @@ export default function ControlRoomPage(){
   }
   function editTeam(x){setEditingTeamId(x.id);setTeam({id:x.id,name:x.name||"",short_name:x.short_name||"",area:x.area||"",home_venue:x.home_venue||"",image:null,consent_confirmed:false,holder_name:""});setTab("teams");window.scrollTo({top:0,behavior:"smooth"});}
   async function deleteTeam(x){if(!window.confirm("Delete "+x.name+"? This cannot be undone."))return;setSaving(true);setError("");setNotice("");const supabase=getSupabase();const result=await supabase.from("teams").delete().eq("id",x.id);if(result.error){setSaving(false);setError("Team could not be deleted: "+result.error.message);return;}setSaving(false);setNotice("Team deleted successfully.");await refresh();}
+
+  async function promoteOfficial(x){
+    if(!window.confirm("Promote "+(x.full_name||x.id)+" to a Team Official account? The user will keep the same login and will gain access to the official portal after their next session refresh."))return;
+    setSaving(true);setError("");setNotice("");
+    const supabase=getSupabase();
+    const result=await supabase.from("profiles").update({role:"team_official",is_active:true,updated_at:new Date().toISOString()}).eq("id",x.id).eq("role","public_user");
+    setSaving(false);
+    if(result.error){setError("Account could not be activated as a team official: "+result.error.message);return;}
+    setNotice("Account promoted to Team Official. Assign the team below, then the official can sign in through the public site.");
+    await refresh();
+  }
 
   async function saveOfficial(e){
     e.preventDefault();setSaving(true);setError("");setNotice("");
@@ -1020,9 +1032,18 @@ export default function ControlRoomPage(){
       </div>}
 
       {tab==="officials"&&<div className="stats-grid">
+        <div className="panel">
+          <h2>Official account activation</h2>
+          <p className="muted">A person first creates a normal Zedek Sports account. An administrator then promotes that account to <b>Team Official</b>. This prevents anyone from self-declaring an official role.</p>
+          {candidateProfiles.length?candidateProfiles.slice(0,20).map(x=><div className="status-card" key={x.id} style={{display:"flex",alignItems:"center",gap:12}}>
+            <div style={{flex:1}}><b>{x.full_name||"Unnamed account"}</b><span>{x.phone||"No phone"} · Public account</span></div>
+            <button className="button primary" disabled={saving} onClick={()=>promoteOfficial(x)}>Activate official</button>
+          </div>):<p className="muted">No unactivated public accounts waiting for official access.</p>}
+          <p className="muted" style={{marginTop:14}}>After activation, assign the official to a team. The same account is then used to access the official portal.</p>
+        </div>
         <form className="panel form-stack" onSubmit={saveOfficial}>
-          <h2>Team Officials</h2>
-          <p className="muted">Assign existing team-official accounts to local teams and manage their current assignments.</p>
+          <h2>Team Official Assignment</h2>
+          <p className="muted">Connect an active Team Official account to a local team. Assignment controls what the official can manage.</p>
           <label>Team<select required value={officialForm.team_id} onChange={e=>setOfficialForm({...officialForm,team_id:e.target.value})}><option value="">Select team</option>{teams.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
           <label>Official account<select required value={officialForm.user_id} onChange={e=>setOfficialForm({...officialForm,user_id:e.target.value})}><option value="">Select official</option>{officialProfiles.map(x=><option key={x.id} value={x.id}>{x.full_name||"Unnamed official"}{x.phone?" · "+x.phone:""}</option>)}</select></label>
           <label>Role<select value={officialForm.role} onChange={e=>setOfficialForm({...officialForm,role:e.target.value})}><option>Team Official</option><option>Club Secretary</option><option>Team Manager</option><option>Media Officer</option><option>Welfare Officer</option><option>Technical Official</option></select></label>
