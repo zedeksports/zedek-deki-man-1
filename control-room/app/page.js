@@ -480,6 +480,7 @@ export default function ControlRoomPage(){
   async function saveChannel(e){
     e.preventDefault();setSaving(true);setError("");setNotice("");const supabase=getSupabase();
     if(!channelForm.match_id||!channelForm.name.trim()){setSaving(false);setError("Match and channel name are required.");return;}
+    if(channelForm.starts_at&&channelForm.ends_at&&new Date(channelForm.ends_at)<=new Date(channelForm.starts_at)){setSaving(false);setError("Channel end time must be after its start time.");return;}
     const values={...channelForm,name:channelForm.name.trim(),provider:channelForm.provider.trim()||null,url:channelForm.url.trim()||null,starts_at:channelForm.starts_at?new Date(channelForm.starts_at).toISOString():null,ends_at:channelForm.ends_at?new Date(channelForm.ends_at).toISOString():null,updated_at:new Date().toISOString()};
     if(values.is_primary){const primary=await supabase.from("match_channels").update({is_primary:false}).eq("match_id",values.match_id);if(primary.error){setSaving(false);setError(primary.error.message);return;}}
     const r=await supabase.from("match_channels").insert(values);
@@ -492,9 +493,17 @@ export default function ControlRoomPage(){
   async function attachStreamAd(e){
     e.preventDefault();setSaving(true);setError("");setNotice("");const supabase=getSupabase();
     const form=e.currentTarget,matchId=form.elements.match_id.value,adId=form.elements.ad_slot_id.value,position=form.elements.position.value;
-    const startsAt=form.elements.starts_at.value,endsAt=form.elements.ends_at.value,priority=Number(form.elements.priority.value)||1;
+    const startsAt=form.elements.starts_at.value,endsAt=form.elements.ends_at.value,priority=Math.max(1,Number(form.elements.priority.value)||1);
     if(!matchId||!adId){setSaving(false);setError("Select both a match and an ad slot.");return;}
-    const r=await supabase.from("match_stream_ads").upsert({match_id:matchId,ad_slot_id:adId,position,active:true,starts_at:startsAt?new Date(startsAt).toISOString():null,ends_at:endsAt?new Date(endsAt).toISOString():null,priority},{onConflict:"match_id,ad_slot_id,position"});
+    if(startsAt&&endsAt&&new Date(endsAt)<=new Date(startsAt)){setSaving(false);setError("Ad end time must be after its start time.");return;}
+    const ad=await supabase.from("ad_slots").select("id,name,active,start_date,end_date,sponsor_id").eq("id",adId).maybeSingle();
+    if(ad.error){setSaving(false);setError(ad.error.message);return;}
+    if(!ad.data){setSaving(false);setError("The selected ad slot no longer exists.");return;}
+    if(!ad.data.active){setSaving(false);setError("The selected ad slot is inactive. Activate it in Ad Slot Manager first.");return;}
+    const today=new Date().toISOString().slice(0,10);
+    if(ad.data.start_date&&ad.data.start_date>today){setSaving(false);setError("The selected ad slot has not started yet.");return;}
+    if(ad.data.end_date&&ad.data.end_date<today){setSaving(false);setError("The selected ad slot has expired.");return;}
+    const r=await supabase.from("match_stream_ads").upsert({match_id:matchId,ad_slot_id:adId,position,active:true,starts_at:startsAt?new Date(startsAt).toISOString():null,ends_at:endsAt?new Date(endsAt).toISOString():null,priority,updated_at:new Date().toISOString()},{onConflict:"match_id,ad_slot_id,position"});
     setSaving(false);if(r.error){setError(r.error.message);return;}form.reset();setNotice("Live-stream ad attached to the match.");await refresh();
   }
   async function toggleStreamAd(row){
