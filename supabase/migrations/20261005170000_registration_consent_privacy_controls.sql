@@ -23,9 +23,9 @@ create index if not exists data_consents_subject_idx on public.data_consents(sub
 create index if not exists data_consents_status_idx on public.data_consents(consent_status);
 alter table public.data_consents enable row level security;
 
-create policy "Admins can read data consents" on public.data_consents for select to authenticated using ((select private.is_admin()));
-create policy "Admins can create data consents" on public.data_consents for insert to authenticated with check ((select private.is_admin()) and consented_by = (select auth.uid()));
-create policy "Admins can update data consents" on public.data_consents for update to authenticated using ((select private.is_admin())) with check ((select private.is_admin()));
+drop policy if exists "Admins can read data consents" on public.data_consents;\ncreate policy "Admins can read data consents" on public.data_consents for select to authenticated using ((select private.is_admin()));
+drop policy if exists "Admins can create data consents" on public.data_consents;\ncreate policy "Admins can create data consents" on public.data_consents for insert to authenticated with check ((select private.is_admin()) and consented_by = (select auth.uid()));
+drop policy if exists "Admins can update data consents" on public.data_consents;\ncreate policy "Admins can update data consents" on public.data_consents for update to authenticated using ((select private.is_admin())) with check ((select private.is_admin()));
 
 create table if not exists public.data_subject_requests (
   id uuid primary key default gen_random_uuid(),
@@ -44,4 +44,4 @@ create table if not exists public.data_subject_requests (
 
 create index if not exists data_subject_requests_status_idx on public.data_subject_requests(status, created_at desc);
 alter table public.data_subject_requests enable row level security;
-create policy "Admins can manage privacy requests" on public.data_subject_requests for all to authenticated using ((select private.is_admin())) with check ((select private.is_admin()));
+drop policy if exists "Admins can manage privacy requests" on public.data_subject_requests;\ncreate policy "Admins can manage privacy requests" on public.data_subject_requests for all to authenticated using ((select private.is_admin())) with check ((select private.is_admin()));
