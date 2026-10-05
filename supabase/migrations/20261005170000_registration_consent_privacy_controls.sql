@@ -8,7 +8,7 @@ create table if not exists public.data_consents (
   privacy_version text not null,
   consent_status text not null default 'active' check (consent_status in ('active','withdrawn','superseded')),
   consented_by uuid references auth.users(id) on delete set null,
-  consented_by_name text,
+  consented_by_name text,\n  consent_holder_name text,\n  consent_holder_contact text,
   authority_type text not null default 'self' check (authority_type in ('self','team_authorized_representative','parent_or_guardian')),
   guardian_name text,
   guardian_contact text,
