@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "../lib/supabase/browser";
 
-const TABS=["overview","competitions","seasons","stages","fixtures","live","lineups","review","stats","publishing","community","teams","players","coaches","officials"];
+const TABS=["overview","competitions","seasons","stages","fixtures","live","lineups","review","stats","publishing","community","teams","players","coaches","officials","privacy"];
 const STAGE_TYPES=["league","group","knockout","quarter_final","semi_final","final"];\nconst CONSENT_TERMS_VERSION="ZEDek-REG-TERMS-v1";\nconst CONSENT_PRIVACY_VERSION="ZEDek-PRIVACY-v1";
 
 function getSupabase(){if(typeof window==="undefined")return null;return createSupabaseBrowserClient();}
@@ -63,7 +63,7 @@ export default function ControlRoomPage(){
   const [channelForm,setChannelForm]=useState({match_id:"",channel_type:"live_stream",name:"",provider:"",url:"",is_primary:false,active:true,starts_at:"",ends_at:""});
 
   useEffect(()=>{if(!liveMatch)return;const tick=()=>setClock(elapsed(liveMatch));tick();const id=setInterval(tick,1000);return()=>clearInterval(id);},[liveMatch]);
-  useEffect(()=>{if(!loading&&tab==="stats")loadStats();},[loading,tab,statsCompetitionId,statsSeasonId]);
+  useEffect(()=>{if(!loading&&tab==="stats")loadStats();},[loading,tab,statsCompetitionId,statsSeasonId]);\n  useEffect(()=>{if(!loading&&tab==="privacy")loadPrivacy();},[loading,tab]);
 
   async function refresh(){
     setError(""); const supabase=getSupabase(); if(!supabase)return;
@@ -111,6 +111,21 @@ export default function ControlRoomPage(){
     boot(); return()=>{mounted=false};
 },[]);
 
+  async function loadPrivacy(){
+    const supabase=getSupabase(); if(!supabase)return;
+    const [c,r]=await Promise.all([
+      supabase.from("data_consents").select("*").order("consented_at",{ascending:false}).limit(100),
+      supabase.from("data_subject_requests").select("*").order("created_at",{ascending:false}).limit(100)
+    ]);
+    if(c.error)setError(c.error.message); else setConsents(c.data||[]);
+    if(r.error)setError(r.error.message); else setPrivacyRequests(r.data||[]);
+  }
+  async function withdrawConsent(x){
+    if(!window.confirm("Withdraw this registration consent for "+(x.consent_holder_name||x.subject_type)+"? This records the withdrawal and does not erase historical football records automatically."))return;
+    setSaving(true);setError("");setNotice("");const supabase=getSupabase();
+    const result=await supabase.from("data_consents").update({consent_status:"withdrawn",withdrawn_at:new Date().toISOString()}).eq("id",x.id).eq("consent_status","active");
+    setSaving(false);if(result.error){setError(result.error.message);return;}setNotice("Consent withdrawal recorded.");await loadPrivacy();
+  }
   async function recordRegistrationConsent({subjectType,subjectId,authorityType="self",holderName,guardianName="",guardianContact=""}){
     const supabase=getSupabase();
     const result=await supabase.from("data_consents").insert({
