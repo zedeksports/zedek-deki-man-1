@@ -1034,7 +1034,8 @@ export default function ControlRoomPage(){
       {tab==="officials"&&<div className="stats-grid">
         <div className="panel">
           <h2>Official account activation</h2>
-          <p className="muted">A person first creates a normal Zedek Sports account. An administrator then promotes that account to <b>Team Official</b>. This prevents anyone from self-declaring an official role.</p>\n          <a className="button" href="https://zedek-sports-score.vercel.app/signup" target="_blank" rel="noreferrer">Open official account signup</a>
+          <p className="muted">A person first creates a normal Zedek Sports account. An administrator then promotes that account to <b>Team Official</b>. This prevents anyone from self-declaring an official role.</p>
+          <a className="button" href="https://zedek-sports-score.vercel.app/signup" target="_blank" rel="noreferrer">Open official account signup</a>
           {candidateProfiles.length?candidateProfiles.slice(0,20).map(x=><div className="status-card" key={x.id} style={{display:"flex",alignItems:"center",gap:12}}>
             <div style={{flex:1}}><b>{x.full_name||"Unnamed account"}</b><span>{x.phone||"No phone"} · Public account</span></div>
             <button className="button primary" disabled={saving} onClick={()=>promoteOfficial(x)}>Activate official</button>
