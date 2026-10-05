@@ -142,12 +142,15 @@ export default function ControlRoomPage(){
     });
     if(result.error)throw result.error;
   }
-  async function optimizeImageUpload(file){
+  async function optimizeImageUpload(file,kind="photo"){
     if(!file)return null;
     if(!file.type?.startsWith("image/"))throw new Error("Please select an image file.");
-    const MAX_DIMENSION=1200;
-    const TARGET_BYTES=300*1024;
-    const MIN_QUALITY=0.55;
+    const isLogo=kind==="logo";
+    const MAX_DIMENSION=isLogo?1600:1200;
+    const TARGET_BYTES=isLogo?600*1024:300*1024;
+    const MIN_QUALITY=isLogo?0.80:0.55;
+    const START_QUALITY=isLogo?0.94:0.82;
+    const QUALITY_STEP=isLogo?0.05:0.07;
     const bitmap=await createImageBitmap(file);
     const scale=Math.min(1,MAX_DIMENSION/Math.max(bitmap.width,bitmap.height));
     const width=Math.max(1,Math.round(bitmap.width*scale));
@@ -158,19 +161,19 @@ export default function ControlRoomPage(){
     if(!ctx){bitmap.close();throw new Error("Image processing is not supported in this browser.");}
     ctx.drawImage(bitmap,0,0,width,height);
     bitmap.close();
-    let quality=0.82;
+    let quality=START_QUALITY;
     let blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/webp",quality));
     while(blob&&blob.size>TARGET_BYTES&&quality>MIN_QUALITY){
-      quality=Math.max(MIN_QUALITY,quality-0.07);
+      quality=Math.max(MIN_QUALITY,quality-QUALITY_STEP);
       blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/webp",quality));
     }
     if(!blob)throw new Error("Could not optimize the selected image.");
     return new File([blob],"optimized.webp",{type:"image/webp",lastModified:Date.now()});
   }
-  async function uploadAsset(file,folder,id){
+  async function uploadAsset(file,folder,id,kind="photo"){
     if(!file)return null;
     const supabase=getSupabase();
-    const optimized=await optimizeImageUpload(file);
+    const optimized=await optimizeImageUpload(file,kind);
     const path=folder+"/"+id+".webp";
     const upload=await supabase.storage.from("sports-assets").upload(path,optimized,{upsert:true,contentType:"image/webp",cacheControl:"31536000"});
     if(upload.error)throw upload.error;
@@ -184,7 +187,7 @@ export default function ControlRoomPage(){
     const result=editingTeamId?await supabase.from("teams").update(values).eq("id",editingTeamId).select("*").single():await supabase.from("teams").insert(values).select("*").single();
     if(result.error){setSaving(false);setError(result.error.message);return;}
     if(isNew){try{await recordRegistrationConsent({subjectType:"team",subjectId:result.data.id,authorityType:"team_authorized_representative",holderName:team.holder_name});}catch(err){await supabase.from("teams").delete().eq("id",result.data.id);setSaving(false);setError("Team was not registered because the consent record could not be saved: "+err.message);return;}}
-    try{const logo_url=await uploadAsset(team.image,"teams",result.data.id);if(logo_url){const updated=await supabase.from("teams").update({logo_url}).eq("id",result.data.id);if(updated.error)throw updated.error;}}
+    try{const logo_url=await uploadAsset(team.image,"teams",result.data.id,"logo");if(logo_url){const updated=await supabase.from("teams").update({logo_url}).eq("id",result.data.id);if(updated.error)throw updated.error;}}
     catch(err){setSaving(false);setError((editingTeamId?"Team updated":"Team saved")+", but logo upload failed: "+err.message);await refresh();return;}
     const wasEditing=!!editingTeamId;setSaving(false);setEditingTeamId("");setTeam({id:"",name:"",short_name:"",area:"",home_venue:"",image:null,consent_confirmed:false,holder_name:""});setNotice(wasEditing?"Team updated successfully.":"Team registered successfully.");await refresh();
   }
@@ -238,7 +241,7 @@ export default function ControlRoomPage(){
     const result=editingCompetitionId?await supabase.from("competitions").update(values).eq("id",editingCompetitionId).select("*").single():await supabase.from("competitions").insert(values).select("*").single();
     if(result.error){setSaving(false);setError(result.error.message);return;}
     try{
-      const logo_url=await uploadAsset(competition.image,"competitions",result.data.id);
+      const logo_url=await uploadAsset(competition.image,"competitions",result.data.id,"logo");
       if(logo_url){const updated=await supabase.from("competitions").update({logo_url}).eq("id",result.data.id);if(updated.error)throw updated.error;}
     }catch(err){setSaving(false);setError((editingCompetitionId?"Competition updated":"Competition saved")+", but logo upload failed: "+err.message);await refresh();return;}
     const wasEditing=!!editingCompetitionId;
