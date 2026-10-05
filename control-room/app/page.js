@@ -94,7 +94,7 @@ export default function ControlRoomPage(){
       supabase.from("match_channels").select("*, matches(home:teams!matches_home_team_id_fkey(name),away:teams!matches_away_team_id_fkey(name))").order("created_at",{ascending:false}),
       supabase.from("match_stream_ads").select("*, ad_slots(name,placement,format,sponsors(name)), matches(home:teams!matches_home_team_id_fkey(name),away:teams!matches_away_team_id_fkey(name))").order("priority").order("created_at",{ascending:false})
     ]);
-    const bad=[a,b,c,d,coachRows,officialProfileRows,officialAssignmentRows,e,f,contentRows,surveyRows,questionRows,feedbackResult,sponsorRows,dealRows,adRows,transactionRows,previewRowsResult,channelRowsResult,streamAdsResult].find(x=>x.error); if(bad){setError(bad.error.message);return;}
+    const bad=[a,b,c,d,coachRows,officialProfileRows,candidateProfileRows,officialAssignmentRows,e,f,contentRows,surveyRows,questionRows,feedbackResult,sponsorRows,dealRows,adRows,transactionRows,previewRowsResult,channelRowsResult,streamAdsResult].find(x=>x.error); if(bad){setError(bad.error.message);return;}
     setCompetitions(a.data||[]);setSeasons(b.data||[]);setTeams(c.data||[]);setPlayers(d.data||[]);setCoaches(coachRows.data||[]);setOfficialProfiles(officialProfileRows.data||[]);setCandidateProfiles(candidateProfileRows.data||[]);setTeamOfficials(officialAssignmentRows.data||[]);
     setStages(e.data||[]);setMatches(f.data||[]);
     setContentPosts(contentRows.data||[]);setSurveys(surveyRows.data||[]);setSurveyQuestions(questionRows.data||[]);setFeedbackRows(feedbackResult.data||[]);
