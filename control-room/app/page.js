@@ -464,8 +464,9 @@ export default function ControlRoomPage(){
   async function attachStreamAd(e){
     e.preventDefault();setSaving(true);setError("");setNotice("");const supabase=getSupabase();
     const form=e.currentTarget,matchId=form.elements.match_id.value,adId=form.elements.ad_slot_id.value,position=form.elements.position.value;
+    const startsAt=form.elements.starts_at.value,endsAt=form.elements.ends_at.value,priority=Number(form.elements.priority.value)||1;
     if(!matchId||!adId){setSaving(false);setError("Select both a match and an ad slot.");return;}
-    const r=await supabase.from("match_stream_ads").upsert({match_id:matchId,ad_slot_id:adId,position,active:true},{onConflict:"match_id,ad_slot_id,position"});
+    const r=await supabase.from("match_stream_ads").upsert({match_id:matchId,ad_slot_id:adId,position,active:true,starts_at:startsAt?new Date(startsAt).toISOString():null,ends_at:endsAt?new Date(endsAt).toISOString():null,priority},{onConflict:"match_id,ad_slot_id,position"});
     setSaving(false);if(r.error){setError(r.error.message);return;}form.reset();setNotice("Live-stream ad attached to the match.");await refresh();
   }
   async function toggleStreamAd(row){
@@ -932,6 +933,9 @@ export default function ControlRoomPage(){
         <label>Match<select name="match_id" required><option value="">Select match</option>{matches.map(x=><option key={x.id} value={x.id}>{x.home?.name||"Home"} vs {x.away?.name||"Away"} · {fmtDate(x.scheduled_at)}</option>)}</select></label>
         <label>Ad slot<select name="ad_slot_id" required><option value="">Select ad slot</option>{ads.map(x=><option key={x.id} value={x.id}>{x.name} · {x.sponsors?.name||"No sponsor"} · {x.placement}</option>)}</select></label>
         <label>Position<select name="position"><option value="pre_roll">Pre-roll</option><option value="mid_roll">Mid-roll</option><option value="post_roll">Post-roll</option><option value="overlay">Overlay</option></select></label>
+        <label>Starts<input type="datetime-local" name="starts_at"/></label>
+        <label>Ends<input type="datetime-local" name="ends_at"/></label>
+        <label>Priority<input type="number" name="priority" min="1" step="1" defaultValue="1"/></label>
         <button className="button primary" disabled={saving}>Attach ad to live stream</button>
       </form>
       <div className="form-stack" style={{marginTop:12}}>{streamAds.map(x=><div className="status-card" key={x.id}><b>{x.ad_slots?.name||"Ad"}</b><span>{x.matches?.home?.name||"Home"} vs {x.matches?.away?.name||"Away"} · {x.position} · {x.active?"ACTIVE":"OFF"} · {x.ad_slots?.sponsors?.name||"No sponsor"}</span><button className="button" onClick={()=>toggleStreamAd(x)}>{x.active?"Disable":"Enable"}</button></div>)}{!streamAds.length&&<p className="muted">No live-stream ads attached yet.</p>}</div>
