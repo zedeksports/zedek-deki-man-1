@@ -5,7 +5,9 @@ import { useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "../lib/supabase/browser";
 
 const TABS=["overview","competitions","seasons","stages","fixtures","live","lineups","review","stats","publishing","community","teams","players","coaches","officials","privacy"];
-const STAGE_TYPES=["league","group","knockout","quarter_final","semi_final","final"];\nconst CONSENT_TERMS_VERSION="ZEDek-REG-TERMS-v1";\nconst CONSENT_PRIVACY_VERSION="ZEDek-PRIVACY-v1";
+const STAGE_TYPES=["league","group","knockout","quarter_final","semi_final","final"];
+const CONSENT_TERMS_VERSION="ZEDek-REG-TERMS-v1";
+const CONSENT_PRIVACY_VERSION="ZEDek-PRIVACY-v1";
 
 function getSupabase(){if(typeof window==="undefined")return null;return createSupabaseBrowserClient();}
 function fmtDate(v){return v?new Date(v).toLocaleString():"—";}
@@ -45,7 +47,8 @@ export default function ControlRoomPage(){
   const [player,setPlayer]=useState({id:"",team_id:"",full_name:"",shirt_number:"",position:"",image:null});
   const [coach,setCoach]=useState({team_id:"",full_name:"",date_of_birth:"",nationality:"",role:"Head Coach",image:null});
   const [officialForm,setOfficialForm]=useState({team_id:"",user_id:"",role:"Team Official",start_date:"",end_date:""}); const [editingTeamId,setEditingTeamId]=useState(""); const [editingPlayerId,setEditingPlayerId]=useState("");
-  const [consents,setConsents]=useState([]),[privacyRequests,setPrivacyRequests]=useState([]);\n  const [saving,setSaving]=useState(false),[statsCompetitionId,setStatsCompetitionId]=useState(""),[statsSeasonId,setStatsSeasonId]=useState(""),[officialStats,setOfficialStats]=useState([]),[statsData,setStatsData]=useState({standings:[],scorers:[],recent:[],form:[]}),[h2hHome,setH2hHome]=useState(""),[h2hAway,setH2hAway]=useState(""),[h2hData,setH2hData]=useState([]),[h2hSummary,setH2hSummary]=useState(null), [reportMatch,setReportMatch]=useState(null), [report,setReport]=useState(null), [reports,setReports]=useState([]),[liveMatch,setLiveMatch]=useState(null),[events,setEvents]=useState([]),[matchStats,setMatchStats]=useState(null),[clock,setClock]=useState(0),[eventForm,setEventForm]=useState({type:"goal",team_id:"",player_id:"",secondary_player_id:"",minute:"",extra_minute:"",details:""}),[lineupMatch,setLineupMatch]=useState(null),[lineupTeam,setLineupTeam]=useState(""),[lineup,setLineup]=useState(null),[lineupPlayers,setLineupPlayers]=useState([]),[lineupLoading,setLineupLoading]=useState(false);
+  const [consents,setConsents]=useState([]),[privacyRequests,setPrivacyRequests]=useState([]);
+  const [saving,setSaving]=useState(false),[statsCompetitionId,setStatsCompetitionId]=useState(""),[statsSeasonId,setStatsSeasonId]=useState(""),[officialStats,setOfficialStats]=useState([]),[statsData,setStatsData]=useState({standings:[],scorers:[],recent:[],form:[]}),[h2hHome,setH2hHome]=useState(""),[h2hAway,setH2hAway]=useState(""),[h2hData,setH2hData]=useState([]),[h2hSummary,setH2hSummary]=useState(null), [reportMatch,setReportMatch]=useState(null), [report,setReport]=useState(null), [reports,setReports]=useState([]),[liveMatch,setLiveMatch]=useState(null),[events,setEvents]=useState([]),[matchStats,setMatchStats]=useState(null),[clock,setClock]=useState(0),[eventForm,setEventForm]=useState({type:"goal",team_id:"",player_id:"",secondary_player_id:"",minute:"",extra_minute:"",details:""}),[lineupMatch,setLineupMatch]=useState(null),[lineupTeam,setLineupTeam]=useState(""),[lineup,setLineup]=useState(null),[lineupPlayers,setLineupPlayers]=useState([]),[lineupLoading,setLineupLoading]=useState(false);
   const [contentPosts,setContentPosts]=useState([]),[editingContentId,setEditingContentId]=useState("");
   const [contentForm,setContentForm]=useState({content_type:"news",title:"",slug:"",excerpt:"",body:"",category:"",status:"draft",featured:false,cover_image_url:""});
   const [surveys,setSurveys]=useState([]),[surveyQuestions,setSurveyQuestions]=useState([]),[surveyResponses,setSurveyResponses]=useState([]);
@@ -63,7 +66,8 @@ export default function ControlRoomPage(){
   const [channelForm,setChannelForm]=useState({match_id:"",channel_type:"live_stream",name:"",provider:"",url:"",is_primary:false,active:true,starts_at:"",ends_at:""});
 
   useEffect(()=>{if(!liveMatch)return;const tick=()=>setClock(elapsed(liveMatch));tick();const id=setInterval(tick,1000);return()=>clearInterval(id);},[liveMatch]);
-  useEffect(()=>{if(!loading&&tab==="stats")loadStats();},[loading,tab,statsCompetitionId,statsSeasonId]);\n  useEffect(()=>{if(!loading&&tab==="privacy")loadPrivacy();},[loading,tab]);
+  useEffect(()=>{if(!loading&&tab==="stats")loadStats();},[loading,tab,statsCompetitionId,statsSeasonId]);
+  useEffect(()=>{if(!loading&&tab==="privacy")loadPrivacy();},[loading,tab]);
 
   async function refresh(){
     setError(""); const supabase=getSupabase(); if(!supabase)return;
