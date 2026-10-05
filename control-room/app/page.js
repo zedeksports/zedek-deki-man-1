@@ -142,12 +142,37 @@ export default function ControlRoomPage(){
     });
     if(result.error)throw result.error;
   }
+  async function optimizeImageUpload(file){
+    if(!file)return null;
+    if(!file.type?.startsWith("image/"))throw new Error("Please select an image file.");
+    const MAX_DIMENSION=1200;
+    const TARGET_BYTES=300*1024;
+    const MIN_QUALITY=0.55;
+    const bitmap=await createImageBitmap(file);
+    const scale=Math.min(1,MAX_DIMENSION/Math.max(bitmap.width,bitmap.height));
+    const width=Math.max(1,Math.round(bitmap.width*scale));
+    const height=Math.max(1,Math.round(bitmap.height*scale));
+    const canvas=document.createElement("canvas");
+    canvas.width=width;canvas.height=height;
+    const ctx=canvas.getContext("2d");
+    if(!ctx){bitmap.close();throw new Error("Image processing is not supported in this browser.");}
+    ctx.drawImage(bitmap,0,0,width,height);
+    bitmap.close();
+    let quality=0.82;
+    let blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/webp",quality));
+    while(blob&&blob.size>TARGET_BYTES&&quality>MIN_QUALITY){
+      quality=Math.max(MIN_QUALITY,quality-0.07);
+      blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/webp",quality));
+    }
+    if(!blob)throw new Error("Could not optimize the selected image.");
+    return new File([blob],"optimized.webp",{type:"image/webp",lastModified:Date.now()});
+  }
   async function uploadAsset(file,folder,id){
     if(!file)return null;
     const supabase=getSupabase();
-    const ext=(file.name.split(".").pop()||"jpg").toLowerCase().replace(/[^a-z0-9]/g,"");
-    const path=folder+"/"+id+"."+ext;
-    const upload=await supabase.storage.from("sports-assets").upload(path,file,{upsert:true,contentType:file.type||"image/jpeg",cacheControl:"3600"});
+    const optimized=await optimizeImageUpload(file);
+    const path=folder+"/"+id+".webp";
+    const upload=await supabase.storage.from("sports-assets").upload(path,optimized,{upsert:true,contentType:"image/webp",cacheControl:"31536000"});
     if(upload.error)throw upload.error;
     return supabase.storage.from("sports-assets").getPublicUrl(path).data.publicUrl;
   }
