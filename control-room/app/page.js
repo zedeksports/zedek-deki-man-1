@@ -31,7 +31,7 @@ function RegistrationConsent({kind,confirmed,setConfirmed,authorityType,setAutho
       <input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} required style={{width:18,height:18,marginTop:2}}/>
       <span>I confirm that the person/club named above has been informed about this registration, the data being collected, its football-related purposes, public profile use, and their rights to request access, correction or withdrawal where applicable. I have authority to submit this registration.</span>
     </label>
-    <span className="muted" style={{display:"block",marginTop:8}}>Terms {CONSENT_TERMS_VERSION} · Privacy notice {CONSENT_PRIVACY_VERSION} · Recorded with the Zedek admin account, date/time and consent basis.</span>
+    <span className="muted" style={{display:"block",marginTop:8}}>Terms {CONSENT_TERMS_VERSION} · Privacy notice {CONSENT_PRIVACY_VERSION} · Recorded with the Zedek admin account, date/time and consent basis. <a href="https://public-7vqk2gqm1-zedeksportsofficial-2298.vercel.app/terms" target="_blank" rel="noreferrer">Terms</a> · <a href="https://public-7vqk2gqm1-zedeksportsofficial-2298.vercel.app/privacy" target="_blank" rel="noreferrer">Privacy</a></span>
   </div>;
 }
 
