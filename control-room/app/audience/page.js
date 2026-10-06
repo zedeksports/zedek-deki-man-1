@@ -10,6 +10,7 @@ function fmtTime(v){return v?new Date(v).toLocaleTimeString([], {hour:"2-digit",
 export default function AudiencePage(){
   const [loading,setLoading]=useState(true),[error,setError]=useState("");
   const [metrics,setMetrics]=useState({live:0,todayVisitors:0,todayViews:0,todaySessions:0,weekVisitors:0});
+  const [presenceLive,setPresenceLive]=useState(null);
   const [daily,setDaily]=useState([]),[pages,setPages]=useState([]),[liveRows,setLiveRows]=useState([]);
 
   async function load(){
@@ -65,7 +66,23 @@ export default function AudiencePage(){
     setLoading(false);
   }
 
-  useEffect(()=>{load();const id=setInterval(load,60000);return()=>clearInterval(id)},[]);
+  useEffect(()=>{
+    load();
+    const id=setInterval(load,60000);
+    const supabase=createSupabaseBrowserClient();
+    const channel=supabase.channel("zedek-public-audience",{
+      config:{presence:{key:"control-room-audience-monitor"}}
+    });
+    channel.on("presence",{event:"sync"},()=>{
+      const state=channel.presenceState();
+      setPresenceLive(Object.keys(state).length);
+    });
+    channel.subscribe();
+    return()=>{
+      clearInterval(id);
+      supabase.removeChannel(channel);
+    };
+  },[]);
 
   const maxViews=useMemo(()=>Math.max(1,...daily.map(x=>Number(x.page_views||0))),[daily]);
 
@@ -79,7 +96,7 @@ export default function AudiencePage(){
     </div>
 
     <div className="stats-grid" style={{marginTop:18}}>
-      {[["Live now",metrics.live,"active sessions in the last 5 minutes"],["Visitors today",metrics.todayVisitors,"unique anonymous visitors"],["Page views today",metrics.todayViews,"document page views"],["Sessions today",metrics.todaySessions,"new sessions"],["Visitors · 7 days",metrics.weekVisitors,"unique anonymous visitors"]].map(([label,value,note])=><div className="status-card" key={label}><span className="section-kicker">{label}</span><strong style={{display:"block",fontSize:32,marginTop:5}}>{fmt(value)}</strong><span className="muted">{note}</span></div>)}
+      {[["Live now",metrics.live,"active sessions in the last 5 minutes"],["Visitors today",metrics.todayVisitors,"unique anonymous visitors"],["Page views today",metrics.todayViews,"document page views"],["Sessions today",metrics.todaySessions,"new sessions"],["Visitors · 7 days",metrics.weekVisitors,"unique anonymous visitors"]].map(([label,value,note])=><div className="status-card" key={label}><span className="section-kicker">{label}</span><strong style={{display:"block",fontSize:32,marginTop:5}}>{label==="Live now" && presenceLive !== null ? fmt(presenceLive) : fmt(value)}</strong><span className="muted">{label==="Live now" ? "Realtime connected visitors" : note}</span></div>)}
     </div>
 
     <div className="home-dashboard" style={{marginTop:18}}>
