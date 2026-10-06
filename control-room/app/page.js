@@ -14,7 +14,8 @@ const CONSENT_PRIVACY_VERSION="ZEDek-PRIVACY-v1";
 function getSupabase(){if(typeof window==="undefined")return null;return createSupabaseBrowserClient();}
 function fmtDate(v){return v?new Date(v).toLocaleString():"—";}
 const LIVE_CONTROL_STATUSES=["scheduled","live","halftime"];
-const MATCH_PHASES=["regulation","extra_time_first_half","extra_time_halftime","extra_time_second_half","penalty_shootout","completed"];\nfunction isKnockoutMatch(m){return !!m&&["knockout","quarter_final","semi_final","final"].includes(m.stages?.stage_type);}
+const MATCH_PHASES=["regulation","extra_time_first_half","extra_time_halftime","extra_time_second_half","penalty_shootout","completed"];
+function isKnockoutMatch(m){return !!m&&["knockout","quarter_final","semi_final","final"].includes(m.stages?.stage_type);}
 function phaseLabel(p){return ({regulation:"REGULATION",extra_time_first_half:"EXTRA TIME 1ST HALF",extra_time_halftime:"ET HALF-TIME",extra_time_second_half:"EXTRA TIME 2ND HALF",penalty_shootout:"PENALTY SHOOTOUT",completed:"COMPLETED"})[p]||"REGULATION";}
 const PREMATCH_STATUSES=["scheduled"];
 function isLiveControlEligible(m){return !!m&&LIVE_CONTROL_STATUSES.includes(m.status);}
