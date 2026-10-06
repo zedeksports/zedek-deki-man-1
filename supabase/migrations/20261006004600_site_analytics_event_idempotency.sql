@@ -10,6 +10,16 @@ create unique index if not exists site_analytics_events_event_key_uidx
 alter view public.site_analytics_daily set (security_invoker = true);
 alter view public.site_analytics_top_pages set (security_invoker = true);
 
+create or replace view public.site_analytics_summary
+with (security_invoker = true)
+as
+select
+  count(distinct visitor_id) filter (where occurred_at >= current_date) as today_unique_visitors,
+  count(*) filter (where event_type = 'page_view' and occurred_at >= current_date) as today_page_views,
+  count(distinct session_id) filter (where event_type = 'session_start' and occurred_at >= current_date) as today_sessions,
+  count(distinct visitor_id) filter (where occurred_at >= current_date - interval '7 days') as week_unique_visitors
+from public.site_analytics_events;
+
 -- Keep the analytics RLS authorization check efficient at scale.
 drop policy if exists site_analytics_admin_select on public.site_analytics_events;
 create policy site_analytics_admin_select
