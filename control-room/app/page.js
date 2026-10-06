@@ -3,8 +3,9 @@
 
 import { useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "../lib/supabase/browser";
+import AudiencePage from "./audience/page";
 
-const TABS=["overview","competitions","seasons","participants","stages","fixtures","live","lineups","review","stats","publishing","community","teams","players","coaches","officials","privacy"];
+const TABS=["overview","competitions","seasons","participants","stages","fixtures","live","lineups","review","stats","publishing","community","audience","teams","players","coaches","officials","privacy"];
 const STAGE_TYPES=["league","group","knockout","quarter_final","semi_final","final"];
 const CONSENT_TERMS_VERSION="ZEDek-REG-TERMS-v1";
 const CONSENT_PRIVACY_VERSION="ZEDek-PRIVACY-v1";
@@ -654,6 +655,8 @@ export default function ControlRoomPage(){
       <div className="nav-links" style={{margin:"16px 0",overflowX:"auto",flexWrap:"nowrap"}}>
         {TABS.map(item=><button key={item} className={"button "+(tab===item?"primary":"")} onClick={()=>setTab(item)}>{item.replace("_"," ").replace(/^./,x=>x.toUpperCase())}</button>)}<a className="button" href="/reporters">Reporters</a>
       </div>
+
+      {tab==="audience" && <AudiencePage/>}
 
       {tab==="stats" && (
         <div className="stats-grid">
