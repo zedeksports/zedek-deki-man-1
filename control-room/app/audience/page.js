@@ -15,23 +15,19 @@ export default function AudiencePage(){
   async function load(){
     setError("");
     const supabase=createSupabaseBrowserClient();
-    const [sessionResult,profileResult,summaryResult,dailyResult,pagesResult,liveResult]=await Promise.all([
-      supabase.auth.getSession(),
-      supabase.auth.getUser(),
-      supabase.from("site_analytics_summary").select("*").maybeSingle(),
-      supabase.from("site_analytics_daily").select("*").gte("day",daysAgo(13)).order("day",{ascending:true}),
-      supabase.from("site_analytics_top_pages").select("*").limit(10),
-      supabase.from("site_analytics_events").select("session_id,page_path,occurred_at").gte("occurred_at",new Date(Date.now()-5*60000).toISOString()).order("occurred_at",{ascending:false}).limit(500)
-    ]);
-
-    if(sessionResult.error||profileResult.error){
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    if(sessionError || !sessionData.session?.user){
       window.location.href="/login";
       return;
     }
-    const current=sessionResult.data.session?.user||null;
-    if(!current){window.location.href="/login";return;}
 
-    const profileQuery=await supabase.from("profiles").select("role,is_active,full_name").eq("id",current.id).maybeSingle();
+    const { data: current, error: userError } = await supabase.auth.getUser();
+    if(userError || !current.user){
+      window.location.href="/login";
+      return;
+    }
+
+    const profileQuery=await supabase.from("profiles").select("role,is_active,full_name").eq("id",current.user.id).maybeSingle();
     if(profileQuery.error){setError(profileQuery.error.message);setLoading(false);return;}
     if(!profileQuery.data?.is_active||!["super_admin","zedek_admin"].includes(profileQuery.data.role)){
       setError("Audience monitoring is restricted to active Zedek administrators.");
@@ -39,11 +35,23 @@ export default function AudiencePage(){
       return;
     }
 
+    const [summaryResult,dailyResult,pagesResult,liveResult]=await Promise.all([
+      supabase.from("site_analytics_summary").select("*").maybeSingle(),
+      supabase.from("site_analytics_daily").select("*").gte("day",daysAgo(13)).order("day",{ascending:true}),
+      supabase.from("site_analytics_top_pages").select("*").limit(10),
+      supabase.from("site_analytics_events").select("session_id,page_path,occurred_at").gte("occurred_at",new Date(Date.now()-5*60000).toISOString()).order("occurred_at",{ascending:false}).limit(500)
+    ]);
+
     const bad=[summaryResult,dailyResult,pagesResult,liveResult].find(x=>x.error);
     if(bad){setError(bad.error.message);setLoading(false);return;}
 
     const summary=summaryResult.data||{};
-    const liveUnique=new Set((liveResult.data||[]).map(x=>x.session_id)).size;
+    const liveMap=new Map();
+    for(const row of liveResult.data||[]){
+      if(!liveMap.has(row.session_id)) liveMap.set(row.session_id,row);
+    }
+    const liveRowsUnique=[...liveMap.values()];
+    const liveUnique=liveRowsUnique.length;
     setMetrics({
       live:liveUnique,
       todayVisitors:summary.today_unique_visitors||0,
@@ -53,7 +61,7 @@ export default function AudiencePage(){
     });
     setDaily(dailyResult.data||[]);
     setPages(pagesResult.data||[]);
-    setLiveRows(liveResult.data||[]);
+    setLiveRows(liveRowsUnique);
     setLoading(false);
   }
 
