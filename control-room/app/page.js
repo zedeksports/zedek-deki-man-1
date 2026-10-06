@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { createSupabaseBrowserClient } from "../lib/supabase/browser";
 
-const TABS=["overview","competitions","seasons","stages","fixtures","live","lineups","review","stats","publishing","community","teams","players","coaches","officials","privacy"];
+const TABS=["overview","competitions","seasons","participants","stages","fixtures","live","lineups","review","stats","publishing","community","teams","players","coaches","officials","privacy"];
 const STAGE_TYPES=["league","group","knockout","quarter_final","semi_final","final"];
 const CONSENT_TERMS_VERSION="ZEDek-REG-TERMS-v1";
 const CONSENT_PRIVACY_VERSION="ZEDek-PRIVACY-v1";
@@ -38,9 +38,9 @@ function RegistrationConsent({kind,confirmed,setConfirmed,authorityType,setAutho
 export default function ControlRoomPage(){
   const [loading,setLoading]=useState(true),[user,setUser]=useState(null),[profile,setProfile]=useState(null);
   const [tab,setTab]=useState("overview"),[error,setError]=useState(""),[notice,setNotice]=useState("");
-  const [competitions,setCompetitions]=useState([]),[seasons,setSeasons]=useState([]),[teams,setTeams]=useState([]),[players,setPlayers]=useState([]),[coaches,setCoaches]=useState([]),[officialProfiles,setOfficialProfiles]=useState([]),[candidateProfiles,setCandidateProfiles]=useState([]),[teamOfficials,setTeamOfficials]=useState([]),[stages,setStages]=useState([]),[matches,setMatches]=useState([]);
+  const [competitions,setCompetitions]=useState([]),[seasons,setSeasons]=useState([]),[teams,setTeams]=useState([]),[seasonTeams,setSeasonTeams]=useState([]),[players,setPlayers]=useState([]),[coaches,setCoaches]=useState([]),[officialProfiles,setOfficialProfiles]=useState([]),[candidateProfiles,setCandidateProfiles]=useState([]),[teamOfficials,setTeamOfficials]=useState([]),[stages,setStages]=useState([]),[matches,setMatches]=useState([]);
   const [competition,setCompetition]=useState({id:"",name:"",code:"",location:"",format:"league",image:null}); const [editingCompetitionId,setEditingCompetitionId]=useState("");
-  const [season,setSeason]=useState({competition_id:"",name:"",year:"",start_date:"",end_date:""});
+  const [season,setSeason]=useState({competition_id:"",name:"",year:"",start_date:"",end_date:""}); const [participantForm,setParticipantForm]=useState({season_id:"",team_id:""});
   const [stage,setStage]=useState({season_id:"",name:"",stage_type:"league",stage_order:"1",is_active:true});
   const [fixture,setFixture]=useState({season_id:"",stage_id:"",home_team_id:"",away_team_id:"",scheduled_at:"",venue:"",round_name:"",leg:"1",notes:""});
   const [team,setTeam]=useState({id:"",name:"",short_name:"",area:"",home_venue:"",image:null});
@@ -71,10 +71,11 @@ export default function ControlRoomPage(){
 
   async function refresh(){
     setError(""); const supabase=getSupabase(); if(!supabase)return;
-    const [a,b,c,d,coachRows,officialProfileRows,candidateProfileRows,officialAssignmentRows,e,f,contentRows,surveyRows,questionRows,feedbackResult,sponsorRows,dealRows,adRows,transactionRows,previewRowsResult,channelRowsResult,streamAdsResult]=await Promise.all([
+    const [a,b,c,d,seasonTeamRows,coachRows,officialProfileRows,candidateProfileRows,officialAssignmentRows,e,f,contentRows,surveyRows,questionRows,feedbackResult,sponsorRows,dealRows,adRows,transactionRows,previewRowsResult,channelRowsResult,streamAdsResult]=await Promise.all([
       supabase.from("competitions").select("*").order("name"),
       supabase.from("seasons").select("*, competitions(name)").order("created_at",{ascending:false}),
       supabase.from("teams").select("*").order("name"),
+      supabase.from("season_teams").select("season_id,team_id,joined_at,teams(id,name,short_name,area,logo_url),seasons(id,name,competition_id,competitions(name))").order("joined_at",{ascending:true}),
       supabase.from("players").select("*, teams(name)").order("full_name"),
       supabase.from("coaches").select("*, team_coaches(team_id,is_current,teams(name))").order("full_name"),
       supabase.from("profiles").select("id,full_name,phone,role,is_active").eq("role","team_official").eq("is_active",true).order("full_name"),
@@ -94,8 +95,8 @@ export default function ControlRoomPage(){
       supabase.from("match_channels").select("*, matches(home:teams!matches_home_team_id_fkey(name),away:teams!matches_away_team_id_fkey(name))").order("created_at",{ascending:false}),
       supabase.from("match_stream_ads").select("*, ad_slots(name,placement,format,sponsors(name)), matches(home:teams!matches_home_team_id_fkey(name),away:teams!matches_away_team_id_fkey(name))").order("priority").order("created_at",{ascending:false})
     ]);
-    const bad=[a,b,c,d,coachRows,officialProfileRows,candidateProfileRows,officialAssignmentRows,e,f,contentRows,surveyRows,questionRows,feedbackResult,sponsorRows,dealRows,adRows,transactionRows,previewRowsResult,channelRowsResult,streamAdsResult].find(x=>x.error); if(bad){setError(bad.error.message);return;}
-    setCompetitions(a.data||[]);setSeasons(b.data||[]);setTeams(c.data||[]);setPlayers(d.data||[]);setCoaches(coachRows.data||[]);setOfficialProfiles(officialProfileRows.data||[]);setCandidateProfiles(candidateProfileRows.data||[]);setTeamOfficials(officialAssignmentRows.data||[]);
+    const bad=[a,b,c,d,seasonTeamRows,coachRows,officialProfileRows,candidateProfileRows,officialAssignmentRows,e,f,contentRows,surveyRows,questionRows,feedbackResult,sponsorRows,dealRows,adRows,transactionRows,previewRowsResult,channelRowsResult,streamAdsResult].find(x=>x.error); if(bad){setError(bad.error.message);return;}
+    setCompetitions(a.data||[]);setSeasons(b.data||[]);setTeams(c.data||[]);setSeasonTeams(seasonTeamRows.data||[]);setPlayers(d.data||[]);setCoaches(coachRows.data||[]);setOfficialProfiles(officialProfileRows.data||[]);setCandidateProfiles(candidateProfileRows.data||[]);setTeamOfficials(officialAssignmentRows.data||[]);
     setStages(e.data||[]);setMatches(f.data||[]);
     setContentPosts(contentRows.data||[]);setSurveys(surveyRows.data||[]);setSurveyQuestions(questionRows.data||[]);setFeedbackRows(feedbackResult.data||[]);
     setSponsors(sponsorRows.data||[]);setDeals(dealRows.data||[]);setAds(adRows.data||[]);setTransactions(transactionRows.data||[]);setPreviewRows(previewRowsResult.data||[]);setChannelRows(channelRowsResult.data||[]);setStreamAds(streamAdsResult.data||[]);
@@ -259,6 +260,21 @@ export default function ControlRoomPage(){
     const wasEditing=!!editingCompetitionId;
     setSaving(false);setEditingCompetitionId("");setCompetition({id:"",name:"",code:"",location:"",format:"league",image:null});
     setNotice(wasEditing?"Competition updated successfully.":"Competition registered successfully.");await refresh();
+  }
+  async function addSeasonTeam(e){
+    e.preventDefault();setSaving(true);setError("");setNotice("");const supabase=getSupabase();
+    if(!participantForm.season_id||!participantForm.team_id){setSaving(false);setError("Select both a season and a team.");return;}
+    const exists=seasonTeams.some(x=>x.season_id===participantForm.season_id&&x.team_id===participantForm.team_id);
+    if(exists){setSaving(false);setError("That team is already assigned to this season.");return;}
+    const result=await supabase.from("season_teams").insert({season_id:participantForm.season_id,team_id:participantForm.team_id});
+    setSaving(false);if(result.error){setError(result.error.message);return;}
+    setParticipantForm({...participantForm,team_id:""});setNotice("Team assigned to season successfully.");await refresh();
+  }
+  async function removeSeasonTeam(row){
+    if(!window.confirm("Remove "+(row.teams?.name||"this team")+" from "+(row.seasons?.name||"this season")+"?"))return;
+    setSaving(true);setError("");setNotice("");const supabase=getSupabase();
+    const result=await supabase.from("season_teams").delete().eq("season_id",row.season_id).eq("team_id",row.team_id);setSaving(false);
+    if(result.error){setError(result.error.message);return;}setNotice("Team removed from season.");await refresh();
   }
   function editCompetition(x){setEditingCompetitionId(x.id);setCompetition({id:x.id,name:x.name||"",code:x.code||"",location:x.location||"",format:x.format||"league",image:null});setTab("competitions");window.scrollTo({top:0,behavior:"smooth"});}
   async function deleteCompetition(x){
@@ -740,6 +756,19 @@ export default function ControlRoomPage(){
         <div className="panel"><h2>Registered</h2>{seasons.map(x=><div className="status-card" key={x.id}><b>{x.name}</b><span>{x.competitions?.name||"Competition"} · {x.year||"Year not set"}</span></div>)}{!seasons.length&&<p className="muted">No seasons yet.</p>}</div>
       </div>}
 
+      {tab==="participants"&&<div className="stats-grid">
+        <form className="panel form-stack" onSubmit={addSeasonTeam}>
+          <h2>Season participants</h2>
+          <p className="muted">Assign registered clubs to the specific season they are competing in. A team remains one permanent club record; this only creates its season participation.</p>
+          <label>Season<select required value={participantForm.season_id} onChange={e=>setParticipantForm({...participantForm,season_id:e.target.value,team_id:""})}><option value="">Select season</option>{seasons.map(x=><option key={x.id} value={x.id}>{x.name} · {x.competitions?.name||"Competition"}</option>)}</select></label>
+          <label>Team<select required value={participantForm.team_id} onChange={e=>setParticipantForm({...participantForm,team_id:e.target.value})}><option value="">Select registered team</option>{teams.filter(t=>!seasonTeams.some(x=>x.season_id===participantForm.season_id&&x.team_id===t.id)).map(x=><option key={x.id} value={x.id}>{x.name}{x.area?" · "+x.area:""}</option>)}</select></label>
+          <button className="button primary" disabled={saving}>{saving?"Saving…":"Assign team to season"}</button>
+        </form>
+        <div className="panel"><h2>Current participation</h2>
+          {seasons.map(s=>{const rows=seasonTeams.filter(x=>x.season_id===s.id);return <div key={s.id} className="status-card" style={{marginBottom:12}}><b>{s.name}</b><span>{s.competitions?.name||"Competition"} · {rows.length} team{rows.length===1?"":"s"}</span>{rows.length?<div style={{marginTop:10}}>{rows.map(r=><div key={r.team_id} style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"center",padding:"8px 0",borderTop:"1px solid rgba(0,0,0,.08)"}}><span>{r.teams?.name||"Team"}</span><button type="button" className="button danger" disabled={saving} onClick={()=>removeSeasonTeam(r)}>Remove</button></div>)}</div>:<span className="muted" style={{display:"block",marginTop:8}}>No teams assigned yet.</span>}</div>})}
+          {!seasons.length&&<p className="muted">Create a season first.</p>}
+        </div>
+      </div>}
       {tab==="stages"&&<div className="stats-grid">
         <form className="panel form-stack" onSubmit={e=>{e.preventDefault();save("stages",{season_id:stage.season_id,name:stage.name.trim(),stage_type:stage.stage_type,stage_order:Number(stage.stage_order)||1,is_active:stage.is_active},()=>setStage({season_id:"",name:"",stage_type:"league",stage_order:"1",is_active:true}));}}>
           <h2>Stage management</h2><label>Season<select required value={stage.season_id} onChange={e=>setStage({...stage,season_id:e.target.value})}><option value="">Select season</option>{seasons.map(x=><option key={x.id} value={x.id}>{x.name} · {x.competitions?.name||""}</option>)}</select></label>
