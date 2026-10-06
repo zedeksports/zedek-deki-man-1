@@ -13,7 +13,7 @@ const CONSENT_PRIVACY_VERSION="ZEDek-PRIVACY-v1";
 
 function getSupabase(){if(typeof window==="undefined")return null;return createSupabaseBrowserClient();}
 function fmtDate(v){return v?new Date(v).toLocaleString():"—";}
-const LIVE_CONTROL_STATUSES=["scheduled","live","halftime"];
+const LIVE_CONTROL_STATUSES=["scheduled","live","halftime"];\nconst MATCH_PHASES=["regulation","extra_time_first_half","extra_time_halftime","extra_time_second_half","penalty_shootout","completed"];\nfunction isKnockoutMatch(m){return !!m&&["knockout","quarter_final","semi_final","final"].includes(m.stages?.stage_type);}\nfunction phaseLabel(p){return ({regulation:"REGULATION",extra_time_first_half:"EXTRA TIME 1ST HALF",extra_time_halftime:"ET HALF-TIME",extra_time_second_half:"EXTRA TIME 2ND HALF",penalty_shootout:"PENALTY SHOOTOUT",completed:"COMPLETED"})[p]||"REGULATION";}
 const PREMATCH_STATUSES=["scheduled"];
 function isLiveControlEligible(m){return !!m&&LIVE_CONTROL_STATUSES.includes(m.status);}
 function isPrematchEligible(m){return !!m&&PREMATCH_STATUSES.includes(m.status);}
@@ -343,19 +343,28 @@ export default function ControlRoomPage(){
   function lineupEligible(m){if(!m||m.status!=="scheduled"||!m.scheduled_at)return false;return Date.now()>=new Date(m.scheduled_at).getTime()-30*60*1000;}
   async function clockAction(m,action){
   if(!m)return;
+  const knockout=isKnockoutMatch(m);
   if(action==="start"&&m.status!=="scheduled"){setError("Only a scheduled fixture can be started. Finished, verified, postponed or cancelled matches are locked.");return;}
   if(action==="halftime"&&m.status!=="live"){setError("Only a live match can be moved to half-time.");return;}
   if(action==="resume"&&m.status!=="halftime"){setError("Only a half-time match can resume the second half.");return;}
+  if(action==="extra_time"&&(!knockout||m.status!=="halftime"||(m.home_score||0)!==(m.away_score||0))){setError("Extra time is available only for a tied knockout match after 90 minutes.");return;}
+  if(action==="et_halftime"&&m.match_phase!=="extra_time_first_half"){setError("Extra-time half-time is only available during the first extra-time half.");return;}
+  if(action==="resume_et"&&m.match_phase!=="extra_time_halftime"){setError("Resume extra time only after the ET half-time break.");return;}
+  if(action==="penalties"&&(!knockout||m.match_phase!=="extra_time_second_half"||(m.home_score||0)!==(m.away_score||0))){setError("Penalty shootout is available only when a knockout match remains tied after extra time.");return;}
   if(action==="finish"&&!["live","halftime"].includes(m.status)){setError("Only a live or half-time match can be finished.");return;}
   const now=new Date().toISOString(); let values={};
-  if(action==="start")values={status:"live",kickoff_at:now,halftime_at:null,second_half_at:null,finished_at:null};
+  if(action==="start")values={status:"live",match_phase:"regulation",kickoff_at:now,halftime_at:null,second_half_at:null,finished_at:null,regulation_home_score:null,regulation_away_score:null,extra_time_home_score:null,extra_time_away_score:null,home_penalty_score:null,away_penalty_score:null,winner_team_id:null};
   if(action==="halftime")values={status:"halftime",halftime_at:now};
-  if(action==="resume")values={status:"live",second_half_at:now};
-  if(action==="finish")values={status:"finished",finished_at:now};
+  if(action==="resume")values={status:"live",match_phase:"regulation",second_half_at:now};
+  if(action==="extra_time")values={status:"live",match_phase:"extra_time_first_half",extra_time_start_at:now,regulation_home_score:m.home_score||0,regulation_away_score:m.away_score||0};
+  if(action==="et_halftime")values={status:"halftime",match_phase:"extra_time_halftime",extra_time_halftime_at:now,extra_time_home_score:m.home_score||0,extra_time_away_score:m.away_score||0};
+  if(action==="resume_et")values={status:"live",match_phase:"extra_time_second_half",extra_time_second_half_at:now};
+  if(action==="penalties")values={status:"live",match_phase:"penalty_shootout",extra_time_home_score:m.home_score||0,extra_time_away_score:m.away_score||0,home_penalty_score:0,away_penalty_score:0};
+  if(action==="finish")values={status:"finished",match_phase:"completed",finished_at:now};
   await updateMatch(m.id,values);
   setLiveMatch({...m,...values});
 }
-  async function addEvent(){ if(!liveMatch)return; const supabase=getSupabase(); setSaving(true); setError(""); const minute=eventForm.minute?Number(eventForm.minute):Math.floor(clock/60); const teamId=eventForm.team_id||null; const playerId=eventForm.player_id||null; if((eventForm.type!=="note"&&eventForm.type!=="var")&&!teamId){setError("Select a team for this event.");setSaving(false);return;} if(playerId){const p=players.find(x=>x.id===playerId);if(!p||p.team_id!==teamId){setError("The selected player does not belong to the selected team.");setSaving(false);return;}} const result=await supabase.from("match_events").insert({match_id:liveMatch.id,team_id:teamId,player_id:playerId,secondary_player_id:eventForm.secondary_player_id||null,event_type:eventForm.type,minute,extra_minute:eventForm.extra_minute?Number(eventForm.extra_minute):null,details:eventForm.details||null}); if(result.error){setError(result.error.message);setSaving(false);return;} if((eventForm.type==="goal"||eventForm.type==="own_goal")&&teamId){const scoringTeam=eventForm.type==="own_goal"?(teamId===liveMatch.home_team_id?liveMatch.away_team_id:liveMatch.home_team_id):teamId; const home=scoringTeam===liveMatch.home_team_id; const values=home?{home_score:(liveMatch.home_score||0)+1}:{away_score:(liveMatch.away_score||0)+1}; const upd=await supabase.from("matches").update(values).eq("id",liveMatch.id); if(upd.error){setError(upd.error.message);setSaving(false);return;} setLiveMatch({...liveMatch,...values});} setEventForm({type:"goal",team_id:"",player_id:"",secondary_player_id:"",minute:"",extra_minute:"",details:""});setSaving(false);await loadLive(liveMatch.id); }
+  async function addEvent(){ if(!liveMatch)return; const supabase=getSupabase(); setSaving(true); setError(""); const minute=eventForm.minute?Number(eventForm.minute):Math.floor(clock/60); const teamId=eventForm.team_id||null; const playerId=eventForm.player_id||null; if((eventForm.type!=="note"&&eventForm.type!=="var")&&!teamId){setError("Select a team for this event.");setSaving(false);return;} if(playerId){const p=players.find(x=>x.id===playerId);if(!p||p.team_id!==teamId){setError("The selected player does not belong to the selected team.");setSaving(false);return;}} const result=await supabase.from("match_events").insert({match_id:liveMatch.id,team_id:teamId,player_id:playerId,secondary_player_id:eventForm.secondary_player_id||null,event_type:eventForm.type,minute,extra_minute:eventForm.extra_minute?Number(eventForm.extra_minute):null,details:eventForm.details||null}); if(result.error){setError(result.error.message);setSaving(false);return;} if((eventForm.type==="goal"||eventForm.type==="own_goal")&&teamId&&liveMatch.match_phase!=="penalty_shootout"){const scoringTeam=eventForm.type==="own_goal"?(teamId===liveMatch.home_team_id?liveMatch.away_team_id:liveMatch.home_team_id):teamId; const home=scoringTeam===liveMatch.home_team_id; const values=home?{home_score:(liveMatch.home_score||0)+1}:{away_score:(liveMatch.away_score||0)+1}; const upd=await supabase.from("matches").update(values).eq("id",liveMatch.id); if(upd.error){setError(upd.error.message);setSaving(false);return;} setLiveMatch({...liveMatch,...values});} setEventForm({type:"goal",team_id:"",player_id:"",secondary_player_id:"",minute:"",extra_minute:"",details:""});setSaving(false);await loadLive(liveMatch.id); }
   async function rebuildOfficialStats(){
     const supabase=getSupabase(); if(!supabase)return;
     setSaving(true); setError(""); setNotice("");
