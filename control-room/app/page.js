@@ -414,21 +414,26 @@ export default function ControlRoomPage(){
   async function verifyReport(r){
     const choice=reviewChoices[r.id]||{};
     const outcome=choice.outcome||r.outcome||"completed";
-    await lockReport(r,outcome,choice.reschedule_at||null);
+    const interruptionReason=(choice.interruption_reason??r.interruption_reason??"").trim();
+    const interruptionMinute=choice.interruption_minute!==undefined&&choice.interruption_minute!==""?Number(choice.interruption_minute):(r.interruption_minute??null);
+    const rescheduleAt=choice.reschedule_at||r.reschedule_at||null;
+    await lockReport(r,outcome,rescheduleAt,interruptionReason,interruptionMinute);
   }
-  async function lockReport(r,outcome,rescheduleAt){
+  async function lockReport(r,outcome,rescheduleAt,interruptionReason,interruptionMinute){
     const supabase=getSupabase();setSaving(true);setError("");setNotice("");
     const {data:{user}}=await supabase.auth.getUser();
+    const interrupted=["suspended","postponed","abandoned","cancelled"].includes(outcome);
     if(!["completed","suspended","postponed","abandoned","cancelled"].includes(outcome)){setError("Select a valid official outcome.");setSaving(false);return;}
-    if(["suspended","postponed","abandoned","cancelled"].includes(outcome)&&!r.interruption_reason){setError("Add or confirm the interruption reason before locking this report.");setSaving(false);return;}
+    if(interrupted&&!interruptionReason){setError("A reason is required before locking an interrupted match.");setSaving(false);return;}
+    if(interruptionMinute!==null&&(!Number.isInteger(interruptionMinute)||interruptionMinute<0)){setError("Interruption minute must be a whole number of 0 or greater.");setSaving(false);return;}
     const now=new Date().toISOString();
     const officialResult=outcome==="completed";
     const targetStatus=officialResult?"verified":outcome;
-    const v=await supabase.from("match_verifications").upsert({match_id:r.match_id,verified_by:user?.id||null,verified_at:now,official_result:officialResult,locked_at:now,notes:r.interruption_reason||null},{onConflict:"match_id"});
+    const v=await supabase.from("match_verifications").upsert({match_id:r.match_id,verified_by:user?.id||null,verified_at:now,official_result:officialResult,locked_at:now,notes:interruptionReason||null},{onConflict:"match_id"});
     if(v.error){setError(v.error.message);setSaving(false);return;}
-    const m=await supabase.from("matches").update({status:targetStatus,rescheduled_at:rescheduleAt||null,interruption_reason:r.interruption_reason||null,interruption_minute:r.interruption_minute?Number(r.interruption_minute):null,outcome_note:r.summary||null}).eq("id",r.match_id);
+    const m=await supabase.from("matches").update({status:targetStatus,rescheduled_at:rescheduleAt||null,interruption_reason:interruptionReason||null,interruption_minute:interruptionMinute,outcome_note:r.summary||null}).eq("id",r.match_id);
     if(m.error){setError(m.error.message);setSaving(false);return;}
-    const rr=await supabase.from("match_reports").update({status:"verified",outcome,interruption_reason:r.interruption_reason||null,interruption_minute:r.interruption_minute?Number(r.interruption_minute):null,reschedule_at:rescheduleAt||null,updated_at:now}).eq("id",r.id);
+    const rr=await supabase.from("match_reports").update({status:"verified",outcome,interruption_reason:interruptionReason||null,interruption_minute:interruptionMinute,reschedule_at:rescheduleAt||null,updated_at:now}).eq("id",r.id);
     if(rr.error){setError(rr.error.message);setSaving(false);return;}
     setSaving(false);setNotice(outcome==="completed"?"Official result verified and locked.":("Match locked as "+outcome+"."+(rescheduleAt?" Reschedule/restart time recorded.":" No reschedule time is required or recorded.")));await loadReports();await refresh();
   }
@@ -814,7 +819,12 @@ export default function ControlRoomPage(){
         <label>Official outcome<select value={outcome} disabled={saving||r.status==="verified"} onChange={e=>setReviewChoices({...reviewChoices,[r.id]:{...choice,outcome:e.target.value}})}>
           <option value="completed">Completed normally</option><option value="suspended">Suspended — resume later</option><option value="postponed">Postponed</option><option value="abandoned">Abandoned</option><option value="cancelled">Cancelled</option>
         </select></label>
-        {interrupted&&<><label>Confirmed reschedule / restart time <span className="muted">(optional)</span><input type="datetime-local" disabled={saving||r.status==="verified"} value={choice.reschedule_at?new Date(choice.reschedule_at).toISOString().slice(0,16):(r.reschedule_at?new Date(r.reschedule_at).toISOString().slice(0,16):"")} onChange={e=>setReviewChoices({...reviewChoices,[r.id]:{...choice,reschedule_at:e.target.value?new Date(e.target.value).toISOString():null}})}/></label><p className="muted">If no date is confirmed, leave this blank. The match can still be verified and published as {outcome}.</p></>}
+        {interrupted&&<div className="form-stack">
+          <label>Official interruption reason<textarea rows="3" disabled={saving||r.status==="verified"} required value={choice.interruption_reason??r.interruption_reason??""} onChange={e=>setReviewChoices({...reviewChoices,[r.id]:{...choice,interruption_reason:e.target.value}})} placeholder="Why was the match suspended, postponed, abandoned or cancelled?"/></label>
+          <label>Interruption minute <span className="muted">(optional)</span><input type="number" min="0" step="1" disabled={saving||r.status==="verified"} value={choice.interruption_minute??r.interruption_minute??""} onChange={e=>setReviewChoices({...reviewChoices,[r.id]:{...choice,interruption_minute:e.target.value}})}/></label>
+          <label>Confirmed reschedule / restart time <span className="muted">(optional)</span><input type="datetime-local" disabled={saving||r.status==="verified"} value={choice.reschedule_at?new Date(choice.reschedule_at).toISOString().slice(0,16):(r.reschedule_at?new Date(r.reschedule_at).toISOString().slice(0,16):"")} onChange={e=>setReviewChoices({...reviewChoices,[r.id]:{...choice,reschedule_at:e.target.value?new Date(e.target.value).toISOString():null}})}/></label>
+          <p className="muted">The administrator's reason is stored with the official match outcome. Rescheduling is optional.</p>
+        </div>}
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="button" onClick={()=>setReport(r)}>Open</button><button className="button primary" disabled={saving||r.status==="verified"} onClick={()=>verifyReport(r)}>Verify & Lock</button><button className="button" disabled={saving||r.status==="rejected"} onClick={()=>rejectReport(r)}>Reject / Return</button></div>
       </div>;
     })}{!reports.length&&<p className="muted">No reports in the queue.</p>}</div>
