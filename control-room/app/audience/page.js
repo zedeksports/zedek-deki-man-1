@@ -4,7 +4,6 @@ import { useEffect, useMemo, useState } from "react";
 import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
 
 function daysAgo(n){return new Date(Date.now()-n*86400000).toISOString();}
-function startOfDay(){const d=new Date();d.setHours(0,0,0,0);return d.toISOString();}
 function fmt(n){return Number(n||0).toLocaleString();}
 function fmtTime(v){return v?new Date(v).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}):"—";}
 
