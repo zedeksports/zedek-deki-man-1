@@ -7,6 +7,7 @@ import AudiencePage from "./audience/page";
 
 const TABS=["overview","competitions","seasons","participants","stages","fixtures","live","lineups","review","stats","publishing","community","audience","teams","players","coaches","officials","privacy"];
 const STAGE_TYPES=["league","group","knockout","quarter_final","semi_final","final"];
+const FORMATION_OPTIONS=["4-4-2","4-3-3","4-2-3-1","3-5-2","3-4-3","5-3-2","5-4-1","4-1-4-1","4-3-2-1","3-4-2-1","4-3-1-2","4-2-2-2"];
 const CONSENT_TERMS_VERSION="ZEDek-REG-TERMS-v1";
 const CONSENT_PRIVACY_VERSION="ZEDek-PRIVACY-v1";
 
@@ -841,7 +842,7 @@ export default function ControlRoomPage(){
           <label>Match<select value={lineupMatch?.id||""} onChange={async e=>{const m=matches.find(x=>x.id===e.target.value);setLineupMatch(m||null);setLineupTeam("");setLineup(null);setLineupPlayers([]);}}><option value="">Select fixture</option>{matches.filter(lineupEligible).map(x=><option key={x.id} value={x.id}>{x.home?.name||"Home"} vs {x.away?.name||"Away"} · {x.status}</option>)}</select></label>
           {lineupMatch&&<div className="form-stack" style={{marginTop:16}}>
             <label>Team<select value={lineupTeam} onChange={async e=>{setLineupTeam(e.target.value);setLineup(null);setLineupPlayers([]);if(e.target.value)await loadLineup(lineupMatch.id,e.target.value);}}><option value="">Select team</option><option value={lineupMatch.home_team_id}>{lineupMatch.home?.name}</option><option value={lineupMatch.away_team_id}>{lineupMatch.away?.name}</option></select></label>
-            {lineupTeam&&<><label>Formation<input placeholder="e.g. 4-3-3" value={lineup?.formation||""} onChange={e=>setLineup({...lineup,formation:e.target.value})}/></label>
+            {lineupTeam&&<><label>Formation<select value={FORMATION_OPTIONS.includes(lineup?.formation) ? lineup.formation : "__custom__"} onChange={e=>{const value=e.target.value;setLineup({...lineup,formation:value==="__custom__"?"":value})}}><option value="">Select formation</option>{FORMATION_OPTIONS.map(f=><option key={f} value={f}>{f}</option>)}<option value="__custom__">Custom / other</option></select>{!FORMATION_OPTIONS.includes(lineup?.formation)&&<input style={{marginTop:8}} placeholder="Custom formation, e.g. 4-1-2-1-2" value={lineup?.formation||""} onChange={e=>setLineup({...lineup,formation:e.target.value})}/>}<span className="muted" style={{display:"block",marginTop:5}}>Choose the formation submitted by the team for this fixture. The selected shape feeds the public Match Centre.</span></label>
             <label>Captain<select value={lineup?.captain_player_id||""} onChange={e=>setLineup({...lineup,captain_player_id:e.target.value})}><option value="">Select captain</option>{lineupPlayers.filter(x=>x.role==="starter").map(x=>{const p=players.find(y=>y.id===x.player_id);return <option key={x.player_id} value={x.player_id}>{p?.full_name||x.player_id}</option>})}</select></label>
             <button className="button primary" disabled={saving||lineupLoading} onClick={saveLineup}>Save lineup</button></>}
           </div>}
