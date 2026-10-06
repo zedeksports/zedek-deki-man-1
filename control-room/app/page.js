@@ -59,7 +59,7 @@ export default function ControlRoomPage(){
   const [deals,setDeals]=useState([]),[editingDealId,setEditingDealId]=useState(""),[dealForm,setDealForm]=useState({sponsor_id:"",deal_name:"",amount:"",currency:"GHS",status:"proposed",start_date:"",end_date:"",placement:"",notes:""});
   const [ads,setAds]=useState([]),[adForm,setAdForm]=useState({name:"",placement:"homepage",format:"banner",sponsor_id:"",image_url:"",target_url:"",active:false,start_date:"",end_date:""}),[editingAdId,setEditingAdId]=useState("");
   const [transactions,setTransactions]=useState([]),[transactionForm,setTransactionForm]=useState({sponsor_id:"",deal_id:"",transaction_type:"payment",amount:"",currency:"GHS",status:"pending",transaction_date:new Date().toISOString().slice(0,10),reference:"",notes:""});
-  const [notificationForm,setNotificationForm]=useState({title:"",body:"",notification_type:"news",team_id:"",match_id:""});
+  const [notificationForm,setNotificationForm]=useState({title:"",body:"",notification_type:"news",team_id:"",match_id:""}),[reviewChoices,setReviewChoices]=useState({});
   const [notificationSaving,setNotificationSaving]=useState(false);
   const [previewRows,setPreviewRows]=useState([]),[channelRows,setChannelRows]=useState([]),[streamAds,setStreamAds]=useState([]);
   const [previewForm,setPreviewForm]=useState({match_id:"",headline:"",summary:"",key_storylines:"",form_note:"",h2h_note:"",venue_note:"",status:"draft"});
@@ -401,7 +401,7 @@ export default function ControlRoomPage(){
 
   async function loadReports(){
     const supabase=getSupabase(); if(!supabase)return;
-    const r=await supabase.from("match_reports").select("*,match:matches(id,home_score,away_score,home:teams!matches_home_team_id_fkey(name),away:teams!matches_away_team_id_fkey(name))").order("created_at",{ascending:false});
+    const r=await supabase.from("match_reports").select("*,match:matches(id,home_score,away_score,status,rescheduled_at,interruption_reason,interruption_minute,home:teams!matches_home_team_id_fkey(name),away:teams!matches_away_team_id_fkey(name))").order("created_at",{ascending:false});
     if(!r.error)setReports(r.data||[]);
   }
   async function saveReport(){
@@ -412,14 +412,25 @@ export default function ControlRoomPage(){
     setSaving(false); if(r.error){setError(r.error.message);return;} setReport(r.data);setNotice("Report submitted for verification.");await loadReports();
   }
   async function verifyReport(r){
+    const choice=reviewChoices[r.id]||{};
+    const outcome=choice.outcome||r.outcome||"completed";
+    await lockReport(r,outcome,choice.reschedule_at||null);
+  }
+  async function lockReport(r,outcome,rescheduleAt){
     const supabase=getSupabase();setSaving(true);setError("");setNotice("");
     const {data:{user}}=await supabase.auth.getUser();
-    const v=await supabase.from("match_verifications").upsert({match_id:r.match_id,verified_by:user?.id||null,verified_at:new Date().toISOString(),official_result:true,locked_at:new Date().toISOString()},{onConflict:"match_id"});
+    if(!["completed","suspended","postponed","abandoned","cancelled"].includes(outcome)){setError("Select a valid official outcome.");setSaving(false);return;}
+    if(["suspended","postponed","abandoned","cancelled"].includes(outcome)&&!r.interruption_reason){setError("Add or confirm the interruption reason before locking this report.");setSaving(false);return;}
+    const now=new Date().toISOString();
+    const officialResult=outcome==="completed";
+    const targetStatus=officialResult?"verified":outcome;
+    const v=await supabase.from("match_verifications").upsert({match_id:r.match_id,verified_by:user?.id||null,verified_at:now,official_result:officialResult,locked_at:now,notes:r.interruption_reason||null},{onConflict:"match_id"});
     if(v.error){setError(v.error.message);setSaving(false);return;}
-    const m=await supabase.from("matches").update({status:"verified"}).eq("id",r.match_id);
+    const m=await supabase.from("matches").update({status:targetStatus,rescheduled_at:rescheduleAt||null,interruption_reason:r.interruption_reason||null,interruption_minute:r.interruption_minute?Number(r.interruption_minute):null,outcome_note:r.summary||null}).eq("id",r.match_id);
     if(m.error){setError(m.error.message);setSaving(false);return;}
-    await supabase.from("match_reports").update({status:"verified",updated_at:new Date().toISOString()}).eq("id",r.id);
-    setSaving(false);setNotice("Official result verified and locked.");await loadReports();
+    const rr=await supabase.from("match_reports").update({status:"verified",outcome,interruption_reason:r.interruption_reason||null,interruption_minute:r.interruption_minute?Number(r.interruption_minute):null,reschedule_at:rescheduleAt||null,updated_at:now}).eq("id",r.id);
+    if(rr.error){setError(rr.error.message);setSaving(false);return;}
+    setSaving(false);setNotice(outcome==="completed"?"Official result verified and locked.":("Match locked as "+outcome+"."+(rescheduleAt?" Reschedule/restart time recorded.":" No reschedule time is required or recorded.")));await loadReports();await refresh();
   }
   async function rejectReport(r){
     const supabase=getSupabase();setSaving(true);setError("");setNotice("");
@@ -790,19 +801,24 @@ export default function ControlRoomPage(){
   </div>
   <div className="panel">
     <h2>Verification Queue</h2>
-    <p className="muted">Review submitted reports and lock official results after verification.</p>
-    <div className="form-stack">{reports.map(r=><div key={r.id} className="status-card">
-      <b>{r.match?.home?.name} {r.match?.home_score} - {r.match?.away_score} {r.match?.away?.name}</b>
-      <p className="muted">{r.status} · {r.submitted_at?new Date(r.submitted_at).toLocaleString():"Not submitted"}</p>
-      <p>{r.summary||"No summary yet."}</p>
-      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
-        <button className="button" onClick={()=>setReport(r)}>Open</button>
-        <button className="button primary" disabled={saving||r.status==="verified"} onClick={()=>verifyReport(r)}>Verify & Lock</button>
-        <button className="button" disabled={saving||r.status==="rejected"} onClick={()=>rejectReport(r)}>Reject</button>
-      </div>
-    </div>)}{!reports.length&&<p className="muted">No reports in the queue.</p>}</div>
+    <p className="muted">Review what the reporter recorded. The administrator chooses and locks the official outcome. Rescheduling is optional.</p>
+    <div className="form-stack">{reports.map(r=>{
+      const choice=reviewChoices[r.id]||{};
+      const outcome=choice.outcome||r.outcome||"completed";
+      const interrupted=["suspended","postponed","abandoned","cancelled"].includes(outcome);
+      return <div key={r.id} className="status-card">
+        <b>{r.match?.home?.name} {r.match?.home_score} - {r.match?.away_score} {r.match?.away?.name}</b>
+        <p className="muted">Report: {r.status} · Reporter outcome: {r.outcome||"not selected"} · Submitted {r.submitted_at?new Date(r.submitted_at).toLocaleString():"Not submitted"}</p>
+        <p>{r.summary||"No summary yet."}</p>
+        {r.interruption_reason&&<p><b>Reporter reason:</b> {r.interruption_reason}</p>}
+        <label>Official outcome<select value={outcome} disabled={saving||r.status==="verified"} onChange={e=>setReviewChoices({...reviewChoices,[r.id]:{...choice,outcome:e.target.value}})}>
+          <option value="completed">Completed normally</option><option value="suspended">Suspended — resume later</option><option value="postponed">Postponed</option><option value="abandoned">Abandoned</option><option value="cancelled">Cancelled</option>
+        </select></label>
+        {interrupted&&<><label>Confirmed reschedule / restart time <span className="muted">(optional)</span><input type="datetime-local" disabled={saving||r.status==="verified"} value={choice.reschedule_at?new Date(choice.reschedule_at).toISOString().slice(0,16):(r.reschedule_at?new Date(r.reschedule_at).toISOString().slice(0,16):"")} onChange={e=>setReviewChoices({...reviewChoices,[r.id]:{...choice,reschedule_at:e.target.value?new Date(e.target.value).toISOString():null}})}/></label><p className="muted">If no date is confirmed, leave this blank. The match can still be verified and published as {outcome}.</p></>}
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="button" onClick={()=>setReport(r)}>Open</button><button className="button primary" disabled={saving||r.status==="verified"} onClick={()=>verifyReport(r)}>Verify & Lock</button><button className="button" disabled={saving||r.status==="rejected"} onClick={()=>rejectReport(r)}>Reject / Return</button></div>
+      </div>;
+    })}{!reports.length&&<p className="muted">No reports in the queue.</p>}</div>
   </div>
-</div>}
 {tab==="publishing"&&(
   <div className="form-stack">
     <div className="stats-grid">
