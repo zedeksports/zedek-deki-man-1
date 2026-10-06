@@ -78,7 +78,7 @@ export default function ControlRoomPage(){
 
   async function refresh(){
     setError(""); const supabase=getSupabase(); if(!supabase)return;
-    const [a,b,c,d,seasonTeamRows,coachRows,officialProfileRows,candidateProfileRows,officialAssignmentRows,e,f,contentRows,surveyRows,questionRows,feedbackResult,sponsorRows,dealRows,adRows,transactionRows,previewRowsResult,channelRowsResult,streamAdsResult]=await Promise.all([
+    const [a,b,c,seasonTeamRows,d,coachRows,officialProfileRows,candidateProfileRows,officialAssignmentRows,e,f,contentRows,surveyRows,questionRows,feedbackResult,sponsorRows,dealRows,adRows,transactionRows,previewRowsResult,channelRowsResult,streamAdsResult]=await Promise.all([
       supabase.from("competitions").select("*").order("name"),
       supabase.from("seasons").select("*, competitions(name)").order("created_at",{ascending:false}),
       supabase.from("teams").select("*").order("name"),
