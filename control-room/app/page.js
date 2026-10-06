@@ -818,7 +818,7 @@ export default function ControlRoomPage(){
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="button" onClick={()=>setReport(r)}>Open</button><button className="button primary" disabled={saving||r.status==="verified"} onClick={()=>verifyReport(r)}>Verify & Lock</button><button className="button" disabled={saving||r.status==="rejected"} onClick={()=>rejectReport(r)}>Reject / Return</button></div>
       </div>;
     })}{!reports.length&&<p className="muted">No reports in the queue.</p>}</div>
-  </div>
+  </div>}
 {tab==="publishing"&&(
   <div className="form-stack">
     <div className="stats-grid">
