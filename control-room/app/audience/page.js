@@ -3,50 +3,54 @@
 import { useEffect, useMemo, useState } from "react";
 import { createSupabaseBrowserClient } from "../../lib/supabase/browser";
 
-function startOfDay(){const d=new Date();d.setHours(0,0,0,0);return d.toISOString();}
 function daysAgo(n){return new Date(Date.now()-n*86400000).toISOString();}
+function startOfDay(){const d=new Date();d.setHours(0,0,0,0);return d.toISOString();}
 function fmt(n){return Number(n||0).toLocaleString();}
 function fmtTime(v){return v?new Date(v).toLocaleTimeString([], {hour:"2-digit",minute:"2-digit"}):"—";}
 
 export default function AudiencePage(){
-  const [loading,setLoading]=useState(true),[error,setError]=useState(""),[user,setUser]=useState(null),[profile,setProfile]=useState(null);
+  const [loading,setLoading]=useState(true),[error,setError]=useState("");
   const [metrics,setMetrics]=useState({live:0,todayVisitors:0,todayViews:0,todaySessions:0,weekVisitors:0});
   const [daily,setDaily]=useState([]),[pages,setPages]=useState([]),[liveRows,setLiveRows]=useState([]);
 
   async function load(){
     setError("");
     const supabase=createSupabaseBrowserClient();
-    const [sessionResult,profileResult,todayVisitors,todayViews,todaySessions,weekVisitors,dailyResult,pagesResult,liveResult]=await Promise.all([
+    const [sessionResult,profileResult,summaryResult,dailyResult,pagesResult,liveResult]=await Promise.all([
       supabase.auth.getSession(),
       supabase.auth.getUser(),
-      supabase.from("site_analytics_events").select("visitor_id",{count:"exact",head:true}).gte("occurred_at",startOfDay()),
-      supabase.from("site_analytics_events").select("id",{count:"exact",head:true}).eq("event_type","page_view").gte("occurred_at",startOfDay()),
-      supabase.from("site_analytics_events").select("session_id",{count:"exact",head:true}).eq("event_type","session_start").gte("occurred_at",startOfDay()),
-      supabase.from("site_analytics_events").select("visitor_id",{count:"exact",head:true}).gte("occurred_at",daysAgo(7)),
+      supabase.from("site_analytics_summary").select("*").maybeSingle(),
       supabase.from("site_analytics_daily").select("*").gte("day",daysAgo(13)).order("day",{ascending:true}),
       supabase.from("site_analytics_top_pages").select("*").limit(10),
-      supabase.from("site_analytics_events").select("visitor_id,session_id,page_path,occurred_at").gte("occurred_at",new Date(Date.now()-5*60000).toISOString()).order("occurred_at",{ascending:false}).limit(500)
+      supabase.from("site_analytics_events").select("session_id,page_path,occurred_at").gte("occurred_at",new Date(Date.now()-5*60000).toISOString()).order("occurred_at",{ascending:false}).limit(500)
     ]);
-    if(sessionResult.error||profileResult.error){window.location.href="/login";return;}
+
+    if(sessionResult.error||profileResult.error){
+      window.location.href="/login";
+      return;
+    }
     const current=sessionResult.data.session?.user||null;
-    setUser(current);
     if(!current){window.location.href="/login";return;}
-    const p=profileResult.data?.user_metadata;
+
     const profileQuery=await supabase.from("profiles").select("role,is_active,full_name").eq("id",current.id).maybeSingle();
     if(profileQuery.error){setError(profileQuery.error.message);setLoading(false);return;}
-    setProfile(profileQuery.data);
     if(!profileQuery.data?.is_active||!["super_admin","zedek_admin"].includes(profileQuery.data.role)){
-      setError("Audience monitoring is restricted to active Zedek administrators.");setLoading(false);return;
+      setError("Audience monitoring is restricted to active Zedek administrators.");
+      setLoading(false);
+      return;
     }
-    const bad=[todayVisitors,todayViews,todaySessions,weekVisitors,dailyResult,pagesResult,liveResult].find(x=>x.error);
+
+    const bad=[summaryResult,dailyResult,pagesResult,liveResult].find(x=>x.error);
     if(bad){setError(bad.error.message);setLoading(false);return;}
+
+    const summary=summaryResult.data||{};
     const liveUnique=new Set((liveResult.data||[]).map(x=>x.session_id)).size;
     setMetrics({
       live:liveUnique,
-      todayVisitors:todayVisitors.count||0,
-      todayViews:todayViews.count||0,
-      todaySessions:todaySessions.count||0,
-      weekVisitors:weekVisitors.count||0
+      todayVisitors:summary.today_unique_visitors||0,
+      todayViews:summary.today_page_views||0,
+      todaySessions:summary.today_sessions||0,
+      weekVisitors:summary.week_unique_visitors||0
     });
     setDaily(dailyResult.data||[]);
     setPages(pagesResult.data||[]);
