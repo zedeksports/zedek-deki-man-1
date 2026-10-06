@@ -469,6 +469,14 @@ export default function ControlRoomPage(){
     if(v.error){setError(v.error.message);setSaving(false);return;}
     const m=await supabase.from("matches").update({status:targetStatus,rescheduled_at:rescheduleAt||null,interruption_reason:interruptionReason||null,interruption_minute:interruptionMinute,outcome_note:r.summary||null}).eq("id",r.match_id);
     if(m.error){setError(m.error.message);setSaving(false);return;}
+    if(officialResult){
+      const seasonResult=await supabase.from("matches").select("season_id").eq("id",r.match_id).maybeSingle();
+      if(seasonResult.error){setError("Official result saved, but statistics rebuild could not resolve the season: "+seasonResult.error.message);setSaving(false);return;}
+      if(seasonResult.data?.season_id){
+        const statsResult=await supabase.rpc("rebuild_official_player_statistics",{p_season_id:seasonResult.data.season_id});
+        if(statsResult.error){setError("Official result saved, but player statistics rebuild failed: "+statsResult.error.message);setSaving(false);return;}
+      }
+    }
     const rr=await supabase.from("match_reports").update({status:"verified",outcome,interruption_reason:interruptionReason||null,interruption_minute:interruptionMinute,reschedule_at:rescheduleAt||null,updated_at:now}).eq("id",r.id);
     if(rr.error){setError(rr.error.message);setSaving(false);return;}
     setSaving(false);setNotice(outcome==="completed"?"Official result verified and locked.":("Match locked as "+outcome+"."+(rescheduleAt?" Reschedule/restart time recorded.":" No reschedule time is required or recorded.")));await loadReports();await refresh();
