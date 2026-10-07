@@ -631,7 +631,7 @@ export default function ControlRoomPage(){
   async function updateMatch(id,values){
     setSaving(true);setError("");setNotice("");const supabase=getSupabase();
     const current=matches.find(x=>x.id===id);
-    if(values.status==="live"&&current&&current.status!=="scheduled"){setSaving(false);setError("A match can only be started from scheduled status.");return;}
+    if(values.status==="live"&&current&&current.status!=="scheduled"&&!(current.status==="halftime"&&values.second_half_at)){setSaving(false);setError("A match can only be started from scheduled status.");return;}
     if(values.status==="scheduled"&&current&&["finished","verified"].includes(current.status)){setSaving(false);setError("Finished or verified matches cannot be reopened from the fixture list.");return;}
     const result=await supabase.from("matches").update(values).eq("id",id);setSaving(false);
     if(result.error){setError(result.error.message);return;}setNotice("Fixture updated.");await refresh();
