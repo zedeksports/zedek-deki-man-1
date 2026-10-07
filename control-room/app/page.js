@@ -1187,7 +1187,7 @@ export default function ControlRoomPage(){
         <div className="panel"><span className="eyebrow">Market activity</span><h2>Transfers & loans</h2><p className="muted">Every published movement appears on the public Player Career and both clubs Team Profiles.</p>
           {playerMovements.length?playerMovements.map(x=><div className="status-card" key={x.id}><div style={{display:"flex",justifyContent:"space-between",gap:10,alignItems:"center"}}><b>{x.players?.full_name||"Player"}</b><strong>{x.movement_type==="loan"?"LOAN":"TRANSFER"}</strong></div><span>{x.from_team?.name||"Previous club"} → {x.to_team?.name||"New club"}</span><span>{x.start_date||"Date not set"}{x.end_date?" → "+x.end_date:""} · {x.status}</span>{x.notes&&<small>{x.notes}</small>}<div className="row-actions"><button type="button" className="button" onClick={()=>editMovement(x)}>Edit</button><button type="button" className="button danger" disabled={saving} onClick={()=>deleteMovement(x)}>Delete</button></div></div>):<div className="empty-state compact"><strong>No transfers or loans recorded.</strong><span>Publish the first movement above and it will appear on public player and team profiles.</span></div>}
         </div>
-      </div>
+      </div>}
       {tab==="coaches"&&<div className="stats-grid">
         <form className="panel form-stack" onSubmit={saveCoach}>
           <h2>Coach registry</h2>
