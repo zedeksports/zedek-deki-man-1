@@ -6,7 +6,7 @@ import { createSupabaseBrowserClient } from "../lib/supabase/browser";
 import AudiencePage from "./audience/page";
 
 const TABS=["overview","competitions","seasons","participants","stages","fixtures","live","lineups","review","stats","publishing","community","audience","teams","players","transfers","coaches","officials","privacy","accounts"];
-const STAGE_TYPES=["league","group","knockout","quarter_final","semi_final","final"];
+const STAGE_TYPES=["league","group","knockout","quarter_final","semi_final","final","friendly"];
 const FORMATION_OPTIONS=["4-4-2","4-3-3","4-2-3-1","3-5-2","3-4-3","5-3-2","5-4-1","4-1-4-1","4-3-2-1","3-4-2-1","4-3-1-2","4-2-2-2"];
 const CONSENT_TERMS_VERSION="ZEDek-REG-TERMS-v1";
 const CONSENT_PRIVACY_VERSION="ZEDek-PRIVACY-v1";
@@ -458,16 +458,17 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
     setError(""); setNotice("");
     const selectedSeasonIds=statsCompetitionId?seasons.filter(x=>x.competition_id===statsCompetitionId).map(x=>x.id):[];
     if(statsCompetitionId&&!selectedSeasonIds.length){setStatsData({standings:[],scorers:[],recent:[],form:[]});setOfficialStats([]);setNotice("No seasons are registered for this competition yet.");return;}
-    let matchQuery=supabase.from("matches").select("id,season_id,stage_id,scheduled_at,status,home_score,away_score,home_team_id,away_team_id,home:teams!matches_home_team_id_fkey(id,name)").eq("status","verified").order("scheduled_at",{ascending:false});
+    let matchQuery=supabase.from("matches").select("id,season_id,stage_id,scheduled_at,status,home_score,away_score,home_team_id,away_team_id,home:teams!matches_home_team_id_fkey(id,name),stage:stages!matches_stage_id_fkey(stage_type)").eq("status","verified").order("scheduled_at",{ascending:false});
     if(statsSeasonId)matchQuery=matchQuery.eq("season_id",statsSeasonId);
     else if(statsCompetitionId)matchQuery=matchQuery.in("season_id",selectedSeasonIds);
     const m=await matchQuery;
     if(m.error){setError(m.error.message);return;}
-    const ids=(m.data||[]).map(x=>x.id);
+    const eligibleMatches=(m.data||[]).filter(x=>x.stage?.stage_type!=="friendly");
+    const ids=eligibleMatches.map(x=>x.id);
     const e=ids.length?await supabase.from("match_events").select("match_id,team_id,player_id,event_type,player:players!match_events_player_id_fkey(full_name,shirt_number),teams(name)").in("match_id",ids).in("event_type",["goal","own_goal","yellow_card","red_card"]):{data:[],error:null};
     if(e.error){setError(e.error.message);return;}
     const map={}; const ensure=(id,name)=>{if(!id)return null;if(!map[id])map[id]={team_id:id,team:name||"Unknown",played:0,wins:0,draws:0,losses:0,gf:0,ga:0,gd:0,points:0};return map[id];};
-    (m.data||[]).forEach(x=>{const h=ensure(x.home_team_id,x.home?.name),a=ensure(x.away_team_id,x.away?.name);if(!h||!a)return;h.played++;a.played++;h.gf+=x.home_score||0;h.ga+=x.away_score||0;a.gf+=x.away_score||0;a.ga+=x.home_score||0;if((x.home_score||0)>(x.away_score||0)){h.wins++;h.points+=3;a.losses++;}else if((x.home_score||0)<(x.away_score||0)){a.wins++;a.points+=3;h.losses++;}else{h.draws++;a.draws++;h.points++;a.points++;}});
+    eligibleMatches.forEach(x=>{const h=ensure(x.home_team_id,x.home?.name),a=ensure(x.away_team_id,x.away?.name);if(!h||!a)return;h.played++;a.played++;h.gf+=x.home_score||0;h.ga+=x.away_score||0;a.gf+=x.away_score||0;a.ga+=x.home_score||0;if((x.home_score||0)>(x.away_score||0)){h.wins++;h.points+=3;a.losses++;}else if((x.home_score||0)<(x.away_score||0)){a.wins++;a.points+=3;h.losses++;}else{h.draws++;a.draws++;h.points++;a.points++;}});
     Object.values(map).forEach(x=>x.gd=x.gf-x.ga);
     const formMap={};
     const ensureForm=(id,name)=>{
@@ -475,7 +476,7 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
       if(!formMap[id])formMap[id]={team_id:id,team:name||"Unknown",matches:[],form:[]};
       return formMap[id];
     };
-    (m.data||[]).forEach(x=>{
+    eligibleMatches.forEach(x=>{
       const h=ensureForm(x.home_team_id,x.home?.name),a=ensureForm(x.away_team_id,x.away?.name);
       if(!h||!a)return;
       const hs=x.home_score||0, as=x.away_score||0;
@@ -495,7 +496,7 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
     const os=await oq;
     if(os.error){setError(os.error.message);return;}
     setOfficialStats(os.data||[]);
-    setStatsData({standings:Object.values(map).sort((a,b)=>b.points-a.points||b.gd-a.gd||b.gf-a.gf||a.team.localeCompare(b.team)),scorers:Object.values(scorers).sort((a,b)=>b.goals-a.goals||a.player.localeCompare(b.player)),recent:(m.data||[]).slice(0,10),form});
+    setStatsData({standings:Object.values(map).sort((a,b)=>b.points-a.points||b.gd-a.gd||b.gf-a.gf||a.team.localeCompare(b.team)),scorers:Object.values(scorers).sort((a,b)=>b.goals-a.goals||a.player.localeCompare(b.player)),recent:eligibleMatches.slice(0,10),form});
   }
   async function loadH2H(){
     const supabase=getSupabase(); if(!supabase)return;
@@ -503,11 +504,11 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
     if(!h2hHome||!h2hAway||h2hHome===h2hAway){setH2hData([]);setH2hSummary(null);if(h2hHome===h2hAway&&h2hHome)setError("Select two different teams for H2H.");return;}
     const selectedSeasonIds=statsCompetitionId?seasons.filter(x=>x.competition_id===statsCompetitionId).map(x=>x.id):[];
     if(statsCompetitionId&&!selectedSeasonIds.length){setH2hData([]);setNotice("No seasons are registered for this competition yet.");return;}
-    let q=supabase.from("matches").select("id,season_id,stage_id,scheduled_at,status,home_score,away_score,home_team_id,away_team_id,home:teams!matches_home_team_id_fkey(id,name),away:teams!matches_away_team_id_fkey(id,name)").in("status",["finished","verified"]).order("scheduled_at",{ascending:false});
+    let q=supabase.from("matches").select("id,season_id,stage_id,scheduled_at,status,home_score,away_score,home_team_id,away_team_id,home:teams!matches_home_team_id_fkey(id,name),away:teams!matches_away_team_id_fkey(id,name),stage:stages!matches_stage_id_fkey(stage_type)").in("status",["finished","verified"]).order("scheduled_at",{ascending:false});
     if(statsSeasonId)q=q.eq("season_id",statsSeasonId); else if(statsCompetitionId)q=q.in("season_id",selectedSeasonIds);
     const r=await q.or("home_team_id.eq."+h2hHome+",away_team_id.eq."+h2hHome);
     if(r.error){setError(r.error.message);return;}
-    const rows=(r.data||[]).filter(x=>(x.home_team_id===h2hHome&&x.away_team_id===h2hAway)||(x.home_team_id===h2hAway&&x.away_team_id===h2hHome));
+    const rows=(r.data||[]).filter(x=>x.stage?.stage_type!=="friendly"&&((x.home_team_id===h2hHome&&x.away_team_id===h2hAway)||(x.home_team_id===h2hAway&&x.away_team_id===h2hHome)));
     const summary={meetings:rows.length,homeWins:0,awayWins:0,draws:0,homeGoals:0,awayGoals:0};
     rows.forEach(x=>{const firstIsHome=x.home_team_id===h2hHome;const hs=Number(x.home_score||0),as=Number(x.away_score||0);const firstGoals=firstIsHome?hs:as;const secondGoals=firstIsHome?as:hs;summary.homeGoals+=firstGoals;summary.awayGoals+=secondGoals;if(firstGoals>secondGoals)summary.homeWins++;else if(secondGoals>firstGoals)summary.awayWins++;else summary.draws++;});
     setH2hData(rows);setH2hSummary(summary);
@@ -841,7 +842,7 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
           <label>Name<input required value={competition.name} onChange={e=>setCompetition({...competition,name:e.target.value})}/></label>
           <label>Code<input value={competition.code} onChange={e=>setCompetition({...competition,code:e.target.value})}/></label>
           <label>Location<input value={competition.location} onChange={e=>setCompetition({...competition,location:e.target.value})}/></label>
-          <label>Format<select value={competition.format} onChange={e=>setCompetition({...competition,format:e.target.value})}><option value="league">League</option><option value="group">Group</option><option value="h2h">H2H</option><option value="knockout">Knockout</option><option value="two_leg">Two-leg</option></select></label>
+          <label>Format<select value={competition.format} onChange={e=>setCompetition({...competition,format:e.target.value})}><option value="league">League</option><option value="group">Group</option><option value="h2h">H2H</option><option value="knockout">Knockout</option><option value="two_leg">Two-leg</option><option value="friendly">Friendly</option></select></label>
           <label>Competition logo<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" onChange={e=>setCompetition({...competition,image:e.target.files?.[0]||null})}/></label>
           {competition.image&&<span className="muted">Selected: {competition.image.name}</span>}
           {editingCompetitionId&&<button type="button" className="button" disabled={saving} onClick={()=>{setEditingCompetitionId("");setCompetition({id:"",name:"",code:"",location:"",format:"league",image:null});}}>Cancel edit</button>}
@@ -882,7 +883,7 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
         <form className="panel form-stack" onSubmit={e=>{e.preventDefault();save("stages",{season_id:stage.season_id,name:stage.name.trim(),stage_type:stage.stage_type,stage_order:Number(stage.stage_order)||1,is_active:stage.is_active},()=>setStage({season_id:"",name:"",stage_type:"league",stage_order:"1",is_active:true}));}}>
           <h2>Stage management</h2><label>Season<select required value={stage.season_id} onChange={e=>setStage({...stage,season_id:e.target.value})}><option value="">Select season</option>{seasons.map(x=><option key={x.id} value={x.id}>{x.name} · {x.competitions?.name||""}</option>)}</select></label>
           <label>Stage name<input required placeholder="e.g. Main League" value={stage.name} onChange={e=>setStage({...stage,name:e.target.value})}/></label>
-          <label>Stage type<select value={stage.stage_type} onChange={e=>setStage({...stage,stage_type:e.target.value})}>{STAGE_TYPES.map(x=><option key={x} value={x}>{x.replace("_"," ")}</option>)}</select></label>
+          <label>Stage type<select value={stage.stage_type} onChange={e=>setStage({...stage,stage_type:e.target.value})}>{STAGE_TYPES.map(x=><option key={x} value={x}>{x==="friendly"?"Friendly":x.replace("_"," ")}</option>)}</select></label>
           <label>Order<input type="number" min="1" value={stage.stage_order} onChange={e=>setStage({...stage,stage_order:e.target.value})}/></label>
           <label><input type="checkbox" checked={stage.is_active} onChange={e=>setStage({...stage,is_active:e.target.checked})}/> Active stage</label>
           <button className="button primary" disabled={saving}>Create stage</button>
@@ -905,7 +906,7 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
           <button className="button primary" disabled={saving}>Create fixture</button>
         </form>
         <div className="panel"><h2>Fixture list</h2>{matches.map(x=><div className="status-card" key={x.id}>
-          <b>{x.home?.name||"Home"} vs {x.away?.name||"Away"}</b><span>{x.seasons?.name||"Season"} · {x.stages?.name||"Stage"} · {fmtDate(x.scheduled_at)} · {x.venue||"Venue TBC"}</span>
+          <b>{x.home?.name||"Home"} vs {x.away?.name||"Away"}</b><span>{x.seasons?.name||"Season"} · {x.stages?.name||"Stage"}{x.stages?.stage_type==="friendly"?" · FRIENDLY":""} · {fmtDate(x.scheduled_at)} · {x.venue||"Venue TBC"}</span>
           <div style={{display:"flex",gap:8,flexWrap:"wrap",marginTop:8}}>
             {x.status==="scheduled"&&<><button className="button primary" onClick={()=>clockAction(x,"start")}>Start live</button><button className="button" onClick={()=>updateMatch(x.id,{status:"postponed"})}>Postpone</button><button className="button" onClick={()=>updateMatch(x.id,{status:"cancelled"})}>Cancel</button></>}
             {x.status==="live"&&<><button className="button" onClick={()=>clockAction(x,"halftime")}>Half-time</button><button className="button" onClick={()=>clockAction(x,"finish")}>Finish match</button></>}
