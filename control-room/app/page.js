@@ -8,6 +8,84 @@ import AudiencePage from "./audience/page";
 const TABS=["overview","competitions","seasons","participants","stages","fixtures","live","lineups","review","stats","publishing","community","audience","teams","players","transfers","coaches","officials","privacy","accounts"];
 const STAGE_TYPES=["league","group","knockout","quarter_final","semi_final","final","friendly"];
 const FORMATION_OPTIONS=["4-4-2","4-3-3","4-2-3-1","3-5-2","3-4-3","5-3-2","5-4-1","4-1-4-1","4-3-2-1","3-4-2-1","4-3-1-2","4-2-2-2"];
+const FORMATION_STARTER_SLOTS={
+  "4-4-2":["GK","RB","CB","CB","LB","RM","CM","CM","LM","ST","ST"],
+  "4-3-3":["GK","RB","CB","CB","LB","CM","CM","CM","LW","ST","RW"],
+  "4-2-3-1":["GK","RB","CB","CB","LB","DM","DM","LW","AM","RW","ST"],
+  "3-5-2":["GK","CB","CB","CB","RWB","CM","CM","CM","LWB","ST","ST"],
+  "3-4-3":["GK","CB","CB","CB","RM","CM","CM","LM","LW","ST","RW"],
+  "5-3-2":["GK","RWB","CB","CB","CB","LWB","CM","CM","CM","ST","ST"],
+  "5-4-1":["GK","RWB","CB","CB","CB","LWB","RM","CM","CM","LM","ST"],
+  "4-1-4-1":["GK","RB","CB","CB","LB","DM","RM","CM","CM","LM","ST"],
+  "4-3-2-1":["GK","RB","CB","CB","LB","CM","CM","CM","AM","AM","ST"],
+  "3-4-2-1":["GK","CB","CB","CB","RM","CM","CM","LM","AM","AM","ST"],
+  "4-3-1-2":["GK","RB","CB","CB","LB","CM","CM","CM","AM","ST","ST"],
+  "4-2-2-2":["GK","RB","CB","CB","LB","DM","DM","AM","AM","ST","ST"]
+};
+const POSITION_ALIASES={
+  GK:["GK","GOALKEEPER","KEEPER"],
+  RB:["RB","RIGHT BACK","RIGHT-BACK"],
+  LB:["LB","LEFT BACK","LEFT-BACK"],
+  CB:["CB","CENTRE BACK","CENTER BACK","CENTRE-BACK","CENTER-BACK","DEFENDER","DEF"],
+  RWB:["RWB","RIGHT WING-BACK","RIGHT WING BACK"],
+  LWB:["LWB","LEFT WING-BACK","LEFT WING BACK"],
+  DM:["DM","DEFENSIVE MIDFIELDER","DEFENSIVE MID"],
+  CM:["CM","CENTRAL MIDFIELDER","CENTRAL MID","MIDFIELDER","MID"],
+  AM:["AM","ATTACKING MIDFIELDER","ATTACKING MID"],
+  RM:["RM","RIGHT MIDFIELDER","RIGHT MID","RIGHT WINGER","RW"],
+  LM:["LM","LEFT MIDFIELDER","LEFT MID","LEFT WINGER","LW"],
+  RW:["RW","RIGHT WINGER","RIGHT WING"],
+  LW:["LW","LEFT WINGER","LEFT WING"],
+  ST:["ST","STRIKER","CENTRE FORWARD","CENTER FORWARD","CF","FW","FORWARD"]
+};
+function canonicalLineupPosition(value){
+  const v=String(value||"").trim().toUpperCase().replace(/\s+/g," ");
+  if(!v)return "";
+  for(const [key,aliases] of Object.entries(POSITION_ALIASES))if(aliases.includes(v))return key;
+  return v;
+}
+function lineupSlotIds(formation){
+  const slots=FORMATION_STARTER_SLOTS[formation];
+  if(slots)return slots.map((position,index)=>({id:position+"-"+index,position,label:position}));
+  const nums=String(formation||"").replace(/\s+/g,"").match(/\d+/g)||[];
+  if(nums.length<2||nums.reduce((a,b)=>a+b,0)!==10)return [];
+  const [def,...rest]=nums;
+  const last=rest.pop();
+  const mids=rest;
+  const result=[{id:"GK-0",position:"GK",label:"GK"}];
+  for(let i=0;i<def;i++)result.push({id:"DEF-"+i,position:"CB",label:i===0&&def>1?"LB":i===def-1&&def>1?"RB":"CB"});
+  mids.forEach((count,rowIndex)=>{
+    const role=rowIndex===0?"DM":"CM";
+    for(let i=0;i<count;i++)result.push({id:role+"-"+rowIndex+"-"+i,position:role,label:role});
+  });
+  for(let i=0;i<last;i++)result.push({id:"FWD-"+i,position:last===1?"ST":"FW",label:last===1?"ST":"FWD"});
+  return result.length===11?result:[];
+}
+function playerMatchesLineupSlot(player,slot){
+  const playerPosition=canonicalLineupPosition(player?.position);
+  if(!playerPosition)return true;
+  const aliases=POSITION_ALIASES[slot.position]||[slot.position];
+  if(aliases.includes(playerPosition))return true;
+  if(slot.position==="CB"&&["DEFENDER","DEF"].includes(playerPosition))return true;
+  if(["CM","DM","AM"].includes(slot.position)&&["CM","DM","AM","MID","MIDFIELDER"].includes(playerPosition))return true;
+  if(["ST","RW","LW"].includes(slot.position)&&["ST","FW","CF","FORWARD","RW","LW"].includes(playerPosition))return true;
+  if(["RM","LM"].includes(slot.position)&&["RM","LM","RW","LW"].includes(playerPosition))return true;
+  return false;
+}
+function normalizeLineupRows(rows,formation){
+  const input=Array.isArray(rows)?rows.map(x=>({...x})):[]; const slots=lineupSlotIds(formation); const used=new Set();
+  const starters=[];
+  slots.forEach(slot=>{
+    const exact=input.find(x=>x.role==="starter"&&!used.has(x.player_id)&&canonicalLineupPosition(x.position)===slot.position);
+    const fallback=input.find(x=>x.role==="starter"&&!used.has(x.player_id)&&!x.position);
+    const row=exact||fallback;
+    if(row){used.add(row.player_id);starters.push({...row,role:"starter",position:slot.position,slot:slot.id});}
+  });
+  input.filter(x=>x.role==="starter"&&!used.has(x.player_id)).forEach(x=>{used.add(x.player_id);starters.push({...x,role:"starter",slot:null});});
+  const substitutes=input.filter(x=>x.role==="substitute").map(x=>({...x,role:"substitute",slot:null}));
+  return [...starters,...substitutes];
+}
+
 const CONSENT_TERMS_VERSION="ZEDek-REG-TERMS-v1";
 const CONSENT_PRIVACY_VERSION="ZEDek-PRIVACY-v1";
 
@@ -573,24 +651,39 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
     setLineup(existing.data||null);
     if(existing.data){
       const rows=await supabase.from("match_lineup_players").select("*").eq("lineup_id",existing.data.id);
-      if(rows.error)setError(rows.error.message); else setLineupPlayers(rows.data||[]);
+      if(rows.error)setError(rows.error.message); else setLineupPlayers(normalizeLineupRows(rows.data||[],existing.data.formation));
     } else setLineupPlayers([]);
     setLineupLoading(false);
+  }
+  function setStarterSlot(slot,playerId){
+    setLineupPlayers(prev=>{
+      const next=prev.filter(x=>x.slot!==slot.id);
+      if(!playerId)return next;
+      const player=players.find(x=>x.id===playerId);
+      if(!player)return next;
+      return [...next.filter(x=>x.player_id!==playerId),{player_id:player.id,role:"starter",shirt_number:player.shirt_number||null,position:slot.position,slot:slot.id}];
+    });
   }
   function toggleLineupPlayer(playerId,role){
     setLineupPlayers(prev=>{
       const found=prev.find(x=>x.player_id===playerId);
-      if(found){return prev.filter(x=>x.player_id!==playerId);}
+      if(found)return prev.filter(x=>x.player_id!==playerId);
       const p=players.find(x=>x.id===playerId);
-      return [...prev,{player_id:playerId,role,shirt_number:p?.shirt_number||null,position:p?.position||null}];
+      return [...prev,{player_id:playerId,role,shirt_number:p?.shirt_number||null,position:role==="starter"?(canonicalLineupPosition(p?.position)||""):(p?.position||null),slot:null}];
     });
   }
   async function saveLineup(){
     if(!lineupMatch||!lineupTeam)return;
     if(!lineupEligible(lineupMatch)){setError("Lineups can only be saved for an eligible scheduled fixture within 30 minutes of kickoff.");return;}
     const selected=lineupPlayers;
-    const starters=selected.filter(x=>x.role==="starter");
-    if(starters.length!==11){setError("A starting lineup must contain exactly 11 players.");return;}
+    const slots=lineupSlotIds(lineup?.formation);
+    const starters=selected.filter(x=>x.role==="starter"&&x.slot);
+    if(slots.length!==11){setError("Select one of the supported formations before submitting the starting XI.");return;}
+    if(starters.length!==11||slots.some(slot=>!starters.some(x=>x.slot===slot.id))){setError("Select one player for every starting position: GK, defenders, midfielders and forwards must all be filled.");return;}
+    const starterIds=starters.map(x=>x.player_id);
+    if(new Set(starterIds).size!==starterIds.length){setError("A player cannot occupy more than one starting position.");return;}
+    const invalidSlot=starters.find(x=>!playerMatchesLineupSlot(players.find(p=>p.id===x.player_id),slots.find(slot=>slot.id===x.slot)));
+    if(invalidSlot){setError("Each starter must match the selected positional slot. Check the starting-position selections before saving.");return;}
     const captain=selected.find(x=>x.player_id===lineup?.captain_player_id)?.player_id||lineup?.captain_player_id;
     if(!captain||!starters.some(x=>x.player_id===captain)){setError("Select a captain from the starting XI.");return;}
     const supabase=getSupabase(); setSaving(true);setError("");setNotice("");
@@ -926,15 +1019,30 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
           <label>Match<select value={lineupMatch?.id||""} onChange={async e=>{const m=matches.find(x=>x.id===e.target.value);setLineupMatch(m||null);setLineupTeam("");setLineup(null);setLineupPlayers([]);}}><option value="">Select fixture</option>{matches.filter(lineupEligible).map(x=><option key={x.id} value={x.id}>{x.home?.name||"Home"} vs {x.away?.name||"Away"} · {x.status}</option>)}</select></label>
           {lineupMatch&&<div className="form-stack" style={{marginTop:16}}>
             <label>Team<select value={lineupTeam} onChange={async e=>{setLineupTeam(e.target.value);setLineup(null);setLineupPlayers([]);if(e.target.value)await loadLineup(lineupMatch.id,e.target.value);}}><option value="">Select team</option><option value={lineupMatch.home_team_id}>{lineupMatch.home?.name}</option><option value={lineupMatch.away_team_id}>{lineupMatch.away?.name}</option></select></label>
-            {lineupTeam&&<><label>Formation<select value={FORMATION_OPTIONS.includes(lineup?.formation) ? lineup.formation : "__custom__"} onChange={e=>{const value=e.target.value;setLineup({...lineup,formation:value==="__custom__"?"":value})}}><option value="">Select formation</option>{FORMATION_OPTIONS.map(f=><option key={f} value={f}>{f}</option>)}<option value="__custom__">Custom / other</option></select>{!FORMATION_OPTIONS.includes(lineup?.formation)&&<input style={{marginTop:8}} placeholder="Custom formation, e.g. 4-1-2-1-2" value={lineup?.formation||""} onChange={e=>setLineup({...lineup,formation:e.target.value})}/>}<span className="muted" style={{display:"block",marginTop:5}}>Choose the formation submitted by the team for this fixture. The selected shape feeds the public Match Centre.</span></label>
+            {lineupTeam&&<><label>Formation<select value={FORMATION_OPTIONS.includes(lineup?.formation) ? lineup.formation : ""} onChange={e=>{const value=e.target.value;setLineup(prev=>({...prev,formation:value}));setLineupPlayers(prev=>normalizeLineupRows(prev,value))}}><option value="">Select formation</option>{FORMATION_OPTIONS.map(f=><option key={f} value={f}>{f}</option>)}</select><span className="muted" style={{display:"block",marginTop:5}}>The formation is the positional blueprint. The starting XI below is locked to its exact slots so players cannot scatter, overlap or be assigned to the wrong line on the public pitch.</span></label>
+            {lineup?.formation?<div className="status-card" style={{marginTop:8,border:"1px solid rgba(0,0,0,.12)"}}>
+              <b>Starting XI — select every position</b>
+              <span className="muted" style={{display:"block",marginTop:4}}>Choose one player for each slot. The same player cannot be used twice, and each selected player is stored with the slot's position.</span>
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",gap:10,marginTop:12}}>
+                {lineupSlotIds(lineup.formation).map((slot,index)=>{
+                  const current=lineupPlayers.find(x=>x.role==="starter"&&x.slot===slot.id);
+                  const selectedOtherIds=new Set(lineupPlayers.filter(x=>x.role==="starter"&&x.slot!==slot.id).map(x=>x.player_id));
+                  const squad=players.filter(p=>p.team_id===lineupTeam&&!selectedOtherIds.has(p.id));
+                  const preferred=squad.filter(p=>playerMatchesLineupSlot(p,slot));
+                  const other=squad.filter(p=>!playerMatchesLineupSlot(p,slot));
+                  return <label key={slot.id}><span style={{fontWeight:800}}>{index+1}. SELECT {slot.label}</span><select value={current?.player_id||""} onChange={e=>setStarterSlot(slot,e.target.value)}><option value="">Select {slot.label}</option>{preferred.length?<optgroup label={"Recommended for "+slot.label}>{preferred.map(p=><option key={p.id} value={p.id}>#{p.shirt_number||"—"} · {p.full_name}{p.position?" · "+p.position:""}</option>)}</optgroup>:null}{other.length?<optgroup label="Other squad players">{other.map(p=><option key={p.id} value={p.id}>#{p.shirt_number||"—"} · {p.full_name}{p.position?" · "+p.position:""}</option>)}</optgroup>:null}</select></label>;
+                })}
+              </div>
+            </div>:null}
             <label>Captain<select value={lineup?.captain_player_id||""} onChange={e=>setLineup({...lineup,captain_player_id:e.target.value})}><option value="">Select captain</option>{lineupPlayers.filter(x=>x.role==="starter").map(x=>{const p=players.find(y=>y.id===x.player_id);return <option key={x.player_id} value={x.player_id}>{p?.full_name||x.player_id}</option>})}</select></label>
             <button className="button primary" disabled={saving||lineupLoading} onClick={saveLineup}>Save lineup</button></>}
           </div>}
         </div>
         <div className="panel">
-          <h2>Squad Selection</h2>
+          <h2>Substitutes / Bench</h2>
           {!lineupTeam?<p className="muted">Select a match and team.</p>:<div className="form-stack">
-            {players.filter(p=>p.team_id===lineupTeam).map(p=>{const row=lineupPlayers.find(x=>x.player_id===p.id);return <div key={p.id} className="status-card" style={{display:"flex",alignItems:"center",gap:10}}>{p.photo_url?<img src={p.photo_url} alt="" style={{width:42,height:42,borderRadius:"50%",objectFit:"cover"}}/>:<div style={{width:42,height:42,borderRadius:"50%",border:"1px solid #ddd",display:"grid",placeItems:"center"}}>👤</div>}<div style={{flex:1}}><b>{p.full_name}</b><br/>#{p.shirt_number||"—"} · {p.position||"Position not set"}{row?.position&&row.position!==p.position?` · Match role: ${row.position}`:""}</div><div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>{row&&<input style={{width:90}} placeholder="GK / CB / CM" value={row.position||""} onChange={e=>setLineupPlayers(lineupPlayers.map(x=>x.player_id===p.id?{...x,position:e.target.value}:x))}/>}<button className={"button "+(row?.role==="starter"?"primary":"")} onClick={()=>{if(row?.role==="starter")setLineupPlayers(lineupPlayers.filter(x=>x.player_id!==p.id));else {setLineupPlayers(lineupPlayers.filter(x=>x.player_id!==p.id).concat({player_id:p.id,role:"starter",shirt_number:p.shirt_number||null,position:p.position||null}));}}}>Starter</button><button className={"button "+(row?.role==="substitute"?"primary":"")} onClick={()=>{if(row?.role==="substitute")setLineupPlayers(lineupPlayers.filter(x=>x.player_id!==p.id));else {setLineupPlayers(lineupPlayers.filter(x=>x.player_id!==p.id).concat({player_id:p.id,role:"substitute",shirt_number:p.shirt_number||null,position:p.position||null}));}}}>Sub</button></div></div>})}
+            <p className="muted">Select substitutes separately. They never occupy a formation slot until they enter the match.</p>
+            {players.filter(p=>p.team_id===lineupTeam&&!lineupPlayers.some(x=>x.role==="starter"&&x.player_id===p.id)).map(p=>{const row=lineupPlayers.find(x=>x.player_id===p.id);return <div key={p.id} className="status-card" style={{display:"flex",alignItems:"center",gap:10}}>{p.photo_url?<img src={p.photo_url} alt="" style={{width:42,height:42,borderRadius:"50%",objectFit:"cover"}}/>:<div style={{width:42,height:42,borderRadius:"50%",border:"1px solid #ddd",display:"grid",placeItems:"center"}}>👤</div>}<div style={{flex:1}}><b>{p.full_name}</b><br/>#{p.shirt_number||"—"} · {p.position||"Position not set"}</div><button className={"button "+(row?.role==="substitute"?"primary":"")} onClick={()=>toggleLineupPlayer(p.id,"substitute")}>{row?.role==="substitute"?"Remove sub":"Substitute"}</button></div>})}
             <p className="muted">Starters: {lineupPlayers.filter(x=>x.role==="starter").length}/11 · Substitutes: {lineupPlayers.filter(x=>x.role==="substitute").length}</p>
           </div>}
         </div>
