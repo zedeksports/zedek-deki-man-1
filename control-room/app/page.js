@@ -307,14 +307,30 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
   function editPlayer(x){setEditingPlayerId(x.id);setPlayer({id:x.id,team_id:x.team_id||"",full_name:x.full_name||"",shirt_number:x.shirt_number??"",position:x.position||"",date_of_birth:x.date_of_birth||"",nationality:x.nationality||"",height_cm:x.height_cm??"",preferred_foot:x.preferred_foot||"",market_transfer_value:x.market_transfer_value||"",image:null,existing_photo_url:x.photo_url||"",consent_confirmed:false,authority_type:"self",holder_name:"",guardian_name:"",guardian_contact:""});setTab("players");window.scrollTo({top:0,behavior:"smooth"});}
   async function saveMovement(e){
     e.preventDefault();setSaving(true);setError("");setNotice("");const supabase=getSupabase();
-    const values={player_id:movementForm.player_id,movement_type:movementForm.movement_type,from_team_id:movementForm.from_team_id||null,to_team_id:movementForm.to_team_id||null,start_date:movementForm.start_date||null,end_date:movementForm.end_date||null,status:movementForm.status,notes:movementForm.notes.trim()||null};
+    const today=new Date().toISOString().slice(0,10);
+    if(movementForm.movement_type==="loan"&&(!movementForm.from_team_id||!movementForm.to_team_id||!movementForm.start_date||!movementForm.end_date)){
+      setSaving(false);setError("A loan must have a mother team, loan team, start date and return/end date.");return;
+    }
+    let status=movementForm.status;
+    if(movementForm.movement_type==="loan"){
+      if(movementForm.start_date>today)status="upcoming";
+      else if(movementForm.end_date<today)status="completed";
+      else status="current";
+    }
+    const values={player_id:movementForm.player_id,movement_type:movementForm.movement_type,from_team_id:movementForm.from_team_id||null,to_team_id:movementForm.to_team_id||null,start_date:movementForm.start_date||null,end_date:movementForm.end_date||null,status,notes:movementForm.notes.trim()||null};
     const result=editingMovementId?await supabase.from("player_movements").update(values).eq("id",editingMovementId):await supabase.from("player_movements").insert(values).select("id").single();
     if(result.error){setSaving(false);setError("Movement could not be saved: "+result.error.message);return;}
-    if(values.to_team_id && ["current","completed"].includes(values.status)){
-      const roster=await supabase.from("players").update({team_id:values.to_team_id,updated_at:new Date().toISOString()}).eq("id",values.player_id);
+    let rosterTeamId=null;
+    if(values.movement_type==="loan"){
+      rosterTeamId=values.status==="current"?values.to_team_id:values.status==="completed"?values.from_team_id:null;
+    }else if(values.to_team_id&&["current","completed"].includes(values.status)){
+      rosterTeamId=values.to_team_id;
+    }
+    if(rosterTeamId){
+      const roster=await supabase.from("players").update({team_id:rosterTeamId,updated_at:new Date().toISOString()}).eq("id",values.player_id);
       if(roster.error){setSaving(false);setError("Movement was recorded, but the player's current team could not be updated: "+roster.error.message);return;}
     }
-    setSaving(false);setEditingMovementId("");setMovementForm({player_id:"",movement_type:"transfer",from_team_id:"",to_team_id:"",start_date:"",end_date:"",status:"completed",notes:""});setNotice("Transfer / loan recorded and player team updated.");await refresh();
+    setSaving(false);setEditingMovementId("");setMovementForm({player_id:"",movement_type:"transfer",from_team_id:"",to_team_id:"",start_date:"",end_date:"",status:"completed",notes:""});setNotice(values.movement_type==="loan"?(values.status==="completed"?"Loan expired/ended — player returned to mother team.":"Loan recorded — player is now registered with the loan team until the return date."):"Transfer recorded and player team updated.");await refresh();
   }
   function editMovement(x){setEditingMovementId(x.id);setMovementForm({player_id:x.player_id||"",movement_type:x.movement_type||"transfer",from_team_id:x.from_team_id||"",to_team_id:x.to_team_id||"",start_date:x.start_date||"",end_date:x.end_date||"",status:x.status||"completed",notes:x.notes||""});setTab("players");window.scrollTo({top:0,behavior:"smooth"});}
   async function deleteMovement(x){if(!window.confirm("Delete this movement record?"))return;setSaving(true);setError("");setNotice("");const supabase=getSupabase();const result=await supabase.from("player_movements").delete().eq("id",x.id);if(result.error){setSaving(false);setError("Movement could not be deleted: "+result.error.message);return;}setSaving(false);setNotice("Movement record deleted.");await refresh();}
@@ -1192,8 +1208,8 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
           <label>Movement type<select value={movementForm.movement_type} onChange={e=>setMovementForm({...movementForm,movement_type:e.target.value})}><option value="transfer">Transfer</option><option value="loan">Loan</option></select></label>
           <label>From team<select required value={movementForm.from_team_id} onChange={e=>setMovementForm({...movementForm,from_team_id:e.target.value})}><option value="">Select previous team</option>{teams.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
           <label>To team<select required value={movementForm.to_team_id} onChange={e=>setMovementForm({...movementForm,to_team_id:e.target.value})}><option value="">Select new team</option>{teams.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></label>
-          <label>Start date<input type="date" value={movementForm.start_date} onChange={e=>setMovementForm({...movementForm,start_date:e.target.value})}/></label>
-          <label>End date<input type="date" value={movementForm.end_date} onChange={e=>setMovementForm({...movementForm,end_date:e.target.value})}/></label>
+          <label>Start date<input type="date" required={movementForm.movement_type==="loan"} value={movementForm.start_date} onChange={e=>setMovementForm({...movementForm,start_date:e.target.value})}/></label>
+          <label>End date<input type="date" required={movementForm.movement_type==="loan"} value={movementForm.end_date} onChange={e=>setMovementForm({...movementForm,end_date:e.target.value})}/></label>
           <label>Status<select value={movementForm.status} onChange={e=>setMovementForm({...movementForm,status:e.target.value})}><option value="upcoming">Upcoming</option><option value="current">Current</option><option value="completed">Completed</option></select></label>
           <label>Notes<textarea value={movementForm.notes} onChange={e=>setMovementForm({...movementForm,notes:e.target.value})} placeholder="Optional transfer / loan note"/></label>
           <button className="button primary" disabled={saving}>{saving?"Saving…":editingMovementId?"Save movement":"Publish movement"}</button>
