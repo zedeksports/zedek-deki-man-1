@@ -406,7 +406,7 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
     const playerId=eventForm.player_id||null;
     const secondaryId=eventForm.secondary_player_id||null;
     const coachId=(["yellow_card","red_card"].includes(eventForm.type)&&eventForm.actor_type==="coach"&&eventForm.coach_id)?eventForm.coach_id:null;
-    const needsPlayer=!["note","var"].includes(eventForm.type);
+    const needsPlayer=!["note","var"].includes(eventForm.type)&&!(["yellow_card","red_card"].includes(eventForm.type)&&eventForm.actor_type==="coach");
     if((eventForm.type!=="note"&&eventForm.type!=="var")&&!teamId){setError("Select a team for this event.");setSaving(false);return;}
     if(needsPlayer&&!playerId){setError(eventForm.type==="substitution"?"Select the player coming off.":"Select an active player for this event.");setSaving(false);return;}
     if(["yellow_card","red_card"].includes(eventForm.type)&&!playerId&&!coachId){setError("Select a player or coach for this card.");setSaving(false);return;}
