@@ -355,11 +355,11 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
     const [ev,st,lu]=await Promise.all([
       supabase.from("match_events").select("*, teams(name), player:players!match_events_player_id_fkey(full_name,shirt_number), secondary_player:players!match_events_secondary_player_id_fkey(full_name,shirt_number)").eq("match_id",id).order("created_at",{ascending:false}),
       supabase.from("match_statistics").select("*").eq("match_id",id).maybeSingle(),
-      supabase.from("match_lineups").select("id,team_id,match_lineup_players(player_id,role,shirt_number,position)").eq("match_id",id)
+      supabase.from("match_lineups").select("id,team_id,match_lineup_players(player_id,role,shirt_number,position,player:players!match_lineup_players_player_id_fkey(id,team_id,full_name,shirt_number,is_active))").eq("match_id",id)
     ]);
     if(ev.error)setError(ev.error.message); else setEvents(ev.data||[]);
     if(st.error)setError(st.error.message); else setMatchStats(st.data||null);
-    if(lu.error)setError(lu.error.message); else setLiveLineupPlayers((lu.data||[]).flatMap(x=>(x.match_lineup_players||[]).map(p=>({...p,team_id:x.team_id}))));
+    if(lu.error)setError(lu.error.message); else setLiveLineupPlayers((lu.data||[]).flatMap(x=>(x.match_lineup_players||[]).map(p=>({...p,team_id:x.team_id,player:p.player||null}))));
   }
   function elapsed(m){ if(!m)return 0; const now=Date.now(); const kickoff=m.kickoff_at?new Date(m.kickoff_at).getTime():0; if(!kickoff)return 0; const halftime=m.halftime_at?new Date(m.halftime_at).getTime():0; const secondHalf=m.second_half_at?new Date(m.second_half_at).getTime():0; const finished=m.finished_at?new Date(m.finished_at).getTime():0; if(m.status==="scheduled")return 0; if(m.status==="live"){ if(secondHalf){ const firstHalfEnd=halftime||secondHalf; const first=Math.max(0,firstHalfEnd-kickoff); const second=Math.max(0,now-secondHalf); return Math.floor((first+second)/1000); } return Math.floor(Math.max(0,now-kickoff)/1000); } if(m.status==="halftime"){ const end=halftime||now; return Math.floor(Math.max(0,end-kickoff)/1000); } if(m.status==="finished"){ if(secondHalf){ const firstHalfEnd=halftime||secondHalf; const first=Math.max(0,firstHalfEnd-kickoff); const second=Math.max(0,(finished||now)-secondHalf); return Math.floor((first+second)/1000); } return Math.floor(Math.max(0,(finished||now)-kickoff)/1000); } return 0; }
   function displayClock(sec){const min=Math.floor(sec/60),s=sec%60;return String(min).padStart(2,"0")+":"+String(s).padStart(2,"0");}
@@ -391,7 +391,7 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
   }
   function liveEventPlayers(teamId,mode="active"){
     const ids=liveEventPlayerIds(teamId,mode);
-    return players.filter(p=>p.team_id===teamId&&ids.has(p.id));
+    return liveLineupPlayers.filter(p=>p.team_id===teamId&&ids.has(p.player_id)&&p.player).map(p=>({...p.player,shirt_number:p.shirt_number||p.player.shirt_number}));
   }
   function liveEventCoaches(teamId){
     if(!teamId)return [];
@@ -413,7 +413,7 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
     if(coachId&&!liveEventCoaches(teamId).some(c=>c.id===coachId)){setError("The selected coach is not currently assigned to the selected team.");setSaving(false);return;}
     if(eventForm.type==="substitution"&&!secondaryId){setError("Select the substitute coming on.");setSaving(false);return;}
     if(playerId){
-      const p=players.find(x=>x.id===playerId);
+      const p=liveLineupPlayers.find(x=>x.player_id===playerId&&x.team_id===teamId)?.player;
       if(!p||p.team_id!==teamId){setError("The selected player does not belong to the selected team.");setSaving(false);return;}
       if(!liveEventPlayerIds(teamId,"active").has(playerId)){setError("That player is not currently one of the active 11 for this team.");setSaving(false);return;}
     }
