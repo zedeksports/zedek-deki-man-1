@@ -232,7 +232,7 @@ export default function ControlRoomPage(){
     if(!window.confirm("Promote "+(x.full_name||x.id)+" to a Team Official account? The user will keep the same login and will gain access to the official portal after their next session refresh."))return;
     setSaving(true);setError("");setNotice("");
     const supabase=getSupabase();
-    const result=await supabase.from("profiles").update({role:"team_official",is_active:true,updated_at:new Date().toISOString()}).eq("id",x.id).eq("role","public_user");
+    const result=await supabase.rpc("admin_set_profile_access",{p_user_id:x.id,p_role:"team_official",p_is_active:true});
     setSaving(false);
     if(result.error){setError("Account could not be activated as a team official: "+result.error.message);return;}
     setNotice("Account promoted to Team Official. Assign the team below, then the official can sign in through the public site.");
