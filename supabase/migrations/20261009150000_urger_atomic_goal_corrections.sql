@@ -32,6 +32,7 @@ begin
  select * into m from public.matches where id=e.match_id for update;
  if not found then raise exception 'Match unavailable or update not permitted'; end if;
  if e.team_id is null or e.team_id not in (m.home_team_id,m.away_team_id) then raise exception 'Goal event team is not part of this match'; end if;
+ if m.status='verified' or exists(select 1 from public.match_verifications v where v.match_id=e.match_id and v.official_result is true) then raise exception 'This match has an official verified result. An administrator must reopen the result before correcting the goal.'; end if;
  select full_name into scorer from public.players where id=e.player_id;
  credited:=case when e.event_type='own_goal' and e.team_id=m.home_team_id then m.away_team_id when e.event_type='own_goal' then m.home_team_id else e.team_id end;
  update public.match_events set event_type='goal_disallowed',details=concat_ws(' · ','GOAL DISALLOWED — '||trim(p_reason),'Original event: '||e.event_type||coalesce(' by '||scorer,''),nullif(e.details,'')) where id=e.id;
@@ -45,3 +46,49 @@ revoke all on function public.record_match_goal(uuid,uuid,uuid,uuid,text,integer
 revoke all on function public.correct_match_goal(uuid,text) from public,anon;
 grant execute on function public.record_match_goal(uuid,uuid,uuid,uuid,text,integer,integer,text) to authenticated;
 grant execute on function public.correct_match_goal(uuid,text) to authenticated;
+
+
+-- Notify followers when an existing goal is disallowed. This is deliberately
+-- separate from the INSERT notification trigger, so it cannot emit a second
+-- ordinary "goal" notification for the same event.
+create or replace function public.notify_match_goal_correction()
+returns trigger
+language plpgsql
+security definer
+set search_path=public,pg_temp
+as $$
+declare home_name text; away_name text; scorer_name text; correction_reason text;
+begin
+  if old.event_type not in ('goal','own_goal') or new.event_type <> 'goal_disallowed' then
+    return new;
+  end if;
+
+  select ht.name, at.name
+    into home_name, away_name
+    from public.matches m
+    join public.teams ht on ht.id=m.home_team_id
+    join public.teams at on at.id=m.away_team_id
+   where m.id=new.match_id;
+
+  select full_name into scorer_name from public.players where id=old.player_id;
+  correction_reason := nullif(trim(split_part(coalesce(new.details,''),' · ',1)),'');
+
+  perform public.notify_match_followers(
+    new.match_id,
+    'goal_correction',
+    'Goal disallowed',
+    coalesce(home_name,'Home') || ' vs ' || coalesce(away_name,'Away')
+      || ' • ' || coalesce(old.minute::text,'?') || ''''
+      || case when scorer_name is not null then ' • ' || scorer_name else '' end
+      || case when correction_reason is not null then ' • ' || correction_reason else '' end
+  );
+  return new;
+end;
+$$;
+
+drop trigger if exists on_match_goal_correction_zedek_notifications on public.match_events;
+create trigger on_match_goal_correction_zedek_notifications
+after update of event_type on public.match_events
+for each row
+when (old.event_type in ('goal','own_goal') and new.event_type='goal_disallowed')
+execute function public.notify_match_goal_correction();
