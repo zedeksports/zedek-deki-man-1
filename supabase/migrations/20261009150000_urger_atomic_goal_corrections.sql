@@ -31,6 +31,7 @@ begin
  if not found or e.event_type not in ('goal','own_goal') then raise exception 'Goal not found or already corrected'; end if;
  select * into m from public.matches where id=e.match_id for update;
  if not found then raise exception 'Match unavailable or update not permitted'; end if;
+ if e.team_id is null or e.team_id not in (m.home_team_id,m.away_team_id) then raise exception 'Goal event team is not part of this match'; end if;
  select full_name into scorer from public.players where id=e.player_id;
  credited:=case when e.event_type='own_goal' and e.team_id=m.home_team_id then m.away_team_id when e.event_type='own_goal' then m.home_team_id else e.team_id end;
  update public.match_events set event_type='goal_disallowed',details=concat_ws(' · ','GOAL DISALLOWED — '||trim(p_reason),'Original event: '||e.event_type||coalesce(' by '||scorer,''),nullif(e.details,'')) where id=e.id;
