@@ -676,7 +676,7 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
     });
   }
   async function saveLineup(){
-    if(!lineupMatch||!lineupTeam)return;
+    if(!lineupMatch||!lineupTeam){setError("Select a fixture and one team before submitting its lineup.");return;}
     if(!lineupEligible(lineupMatch)){setError("Lineups can only be saved for an eligible scheduled fixture within 30 minutes of kickoff.");return;}
     const selected=lineupPlayers;
     const slots=lineupSlotIds(lineup?.formation);
@@ -689,22 +689,45 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
     if(invalidSlot){setError("Each starter must match the selected positional slot. Check the starting-position selections before saving.");return;}
     const captain=selected.find(x=>x.player_id===lineup?.captain_player_id)?.player_id||lineup?.captain_player_id;
     if(!captain||!starters.some(x=>x.player_id===captain)){setError("Select a captain from the starting XI.");return;}
-    const supabase=getSupabase(); setSaving(true);setError("");setNotice("");
+    const supabase=getSupabase();
+    if(!supabase){setError("The database connection is unavailable. Refresh the Control Room and try again.");return;}
+    setSaving(true);setError("");setNotice("");
     let lineupId=lineup?.id;
-    if(lineupId){
-      const r=await supabase.from("match_lineups").update({formation:lineup.formation||null,captain_player_id:captain,submitted_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq("id",lineupId);
-      if(r.error){setError(r.error.message);setSaving(false);return;}
-      await supabase.from("match_lineup_players").delete().eq("lineup_id",lineupId);
-    } else {
-      const r=await supabase.from("match_lineups").insert({match_id:lineupMatch.id,team_id:lineupTeam,formation:lineup?.formation||null,captain_player_id:captain,submitted_at:new Date().toISOString()}).select("*").single();
-      if(r.error){setError(r.error.message);setSaving(false);return;}
-      lineupId=r.data.id;
+    let createdLineup=false;
+    try{
+      if(lineupId){
+        const updated=await supabase.from("match_lineups").update({formation:lineup.formation||null,captain_player_id:captain,submitted_at:new Date().toISOString(),updated_at:new Date().toISOString()}).eq("id",lineupId).select("id").maybeSingle();
+        if(updated.error)throw new Error("Could not update lineup: "+updated.error.message);
+        if(!updated.data?.id)throw new Error("The lineup could not be updated. Your account may not have permission to edit this fixture.");
+        const removed=await supabase.from("match_lineup_players").delete().eq("lineup_id",lineupId);
+        if(removed.error)throw new Error("Lineup details could not be replaced: "+removed.error.message);
+      } else {
+        const created=await supabase.from("match_lineups").insert({match_id:lineupMatch.id,team_id:lineupTeam,formation:lineup?.formation||null,captain_player_id:captain,submitted_at:new Date().toISOString()}).select("id").single();
+        if(created.error)throw new Error("Could not create lineup: "+created.error.message);
+        if(!created.data?.id)throw new Error("The database did not confirm that the lineup was created.");
+        lineupId=created.data.id;
+        createdLineup=true;
+      }
+      const rows=selected.map(x=>({lineup_id:lineupId,player_id:x.player_id,role:x.role,shirt_number:x.shirt_number||null,position:x.position||null}));
+      if(!rows.length)throw new Error("No players were selected. Add the starting XI and any substitutes before submitting.");
+      const inserted=await supabase.from("match_lineup_players").insert(rows);
+      if(inserted.error){
+        if(createdLineup){
+          const cleanup=await supabase.from("match_lineups").delete().eq("id",lineupId);
+          if(cleanup.error)throw new Error("Players could not be saved: "+inserted.error.message+". The empty lineup record could not be removed: "+cleanup.error.message);
+        }
+        throw new Error("The lineup header was saved, but its player list was rejected: "+inserted.error.message+". Please retry; if this is an existing lineup, reload it before retrying.");
+      }
+      const verification=await supabase.from("match_lineups").select("id,submitted_at,match_lineup_players(id)").eq("id",lineupId).single();
+      if(verification.error)throw new Error("The lineup was written but could not be verified: "+verification.error.message);
+      if((verification.data?.match_lineup_players||[]).length!==rows.length)throw new Error("The database saved the lineup, but the player count did not match. Reload and check before submitting again.");
+      await loadLineup(lineupMatch.id,lineupTeam);
+      setNotice((lineupMatch.home_team_id===lineupTeam?lineupMatch.home?.name:lineupMatch.away?.name||"Team")+" lineup submitted successfully ("+rows.filter(x=>x.role==="starter").length+" starters, "+rows.filter(x=>x.role==="substitute").length+" substitutes). Submit the other team's lineup separately using the Team selector.");
+    }catch(err){
+      setError(err?.message||"Lineup submission failed unexpectedly. Please retry.");
+    }finally{
+      setSaving(false);
     }
-    const rows=selected.map(x=>({lineup_id:lineupId,player_id:x.player_id,role:x.role,shirt_number:x.shirt_number||null,position:x.position||null}));
-    const r2=await supabase.from("match_lineup_players").insert(rows);
-    setSaving(false);
-    if(r2.error){setError(r2.error.message);return;}
-    setNotice("Lineup saved and submitted."); await loadLineup(lineupMatch.id,lineupTeam);
   }
   async function saveStats(){ if(!liveMatch)return; const supabase=getSupabase(); const keys=["home_possession","away_possession","home_shots","away_shots","home_shots_on_target","away_shots_on_target","home_corners","away_corners","home_fouls","away_fouls","home_offsides","away_offsides","home_saves","away_saves","home_passes","away_passes","home_pass_accuracy","away_pass_accuracy","home_crosses","away_crosses","home_free_kicks","away_free_kicks","home_goal_kicks","away_goal_kicks","home_throw_ins","away_throw_ins","home_xg","away_xg"]; const values={match_id:liveMatch.id}; keys.forEach(k=>values[k]=Number(matchStats?.[k]||0)); const r=await supabase.from("match_statistics").upsert(values,{onConflict:"match_id"}); if(r.error)setError(r.error.message);else setNotice("Match statistics saved."); await loadLive(liveMatch.id); }
   async function updateMatch(id,values){
