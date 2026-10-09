@@ -6,9 +6,10 @@ create or replace function public.record_match_goal(
 language plpgsql security invoker set search_path=public,pg_temp as $$
 declare m public.matches%rowtype; eid uuid; scoring_team uuid; hs integer; ascore integer;
 begin
- if p_event_type not in ('goal','own_goal') then raise exception 'Invalid goal event type'; end if;
+ if p_event_type is null or p_event_type not in ('goal','own_goal') then raise exception 'Invalid goal event type'; end if;
  select * into m from public.matches where id=p_match_id for update;
  if not found then raise exception 'Match unavailable or score update not permitted'; end if;
+ if m.status not in ('live','halftime') then raise exception 'Goals can only be recorded while a match is live or at halftime'; end if;
  if p_team_id is null or p_team_id not in (m.home_team_id,m.away_team_id) then raise exception 'Event team is not in this match'; end if;
  if p_player_id is not null and not exists(select 1 from public.players where id=p_player_id and team_id=p_team_id) then raise exception 'Goal scorer must belong to the selected team'; end if;
  if p_secondary_player_id is not null and (p_secondary_player_id=p_player_id or not exists(select 1 from public.players where id=p_secondary_player_id and team_id=p_team_id)) then raise exception 'Assist player must be a different player from the same team'; end if;
@@ -31,6 +32,7 @@ begin
  if not found or e.event_type not in ('goal','own_goal') then raise exception 'Goal not found or already corrected'; end if;
  select * into m from public.matches where id=e.match_id for update;
  if not found then raise exception 'Match unavailable or update not permitted'; end if;
+ if m.status not in ('live','halftime','finished') then raise exception 'Goals can only be corrected for live, halftime, or finished matches'; end if;
  if e.team_id is null or e.team_id not in (m.home_team_id,m.away_team_id) then raise exception 'Goal event team is not part of this match'; end if;
  if m.status='verified' or exists(select 1 from public.match_verifications v where v.match_id=e.match_id and v.official_result is true) then raise exception 'This match has an official verified result. An administrator must reopen the result before correcting the goal.'; end if;
  select full_name into scorer from public.players where id=e.player_id;
