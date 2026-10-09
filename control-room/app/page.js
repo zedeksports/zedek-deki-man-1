@@ -485,6 +485,7 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
     const playerId=eventForm.player_id||null;
     const secondaryId=eventForm.secondary_player_id||null;
     const coachId=(["yellow_card","red_card"].includes(eventForm.type)&&eventForm.actor_type==="coach"&&eventForm.coach_id)?eventForm.coach_id:null;
+    if(eventForm.type==="player_rating"&&!["live","halftime","finished","verified"].includes(liveMatch.status)){setError("Player ratings can only be recorded during a live match or after full-time.");setSaving(false);return;}
     const needsPlayer=!["note","var"].includes(eventForm.type)&&!(["yellow_card","red_card"].includes(eventForm.type)&&eventForm.actor_type==="coach");
     if((eventForm.type!=="note"&&eventForm.type!=="var")&&!teamId){setError("Select a team for this event.");setSaving(false);return;}
     if(needsPlayer&&!playerId){setError(eventForm.type==="substitution"?"Select the player coming off.":"Select an active player for this event.");setSaving(false);return;}
