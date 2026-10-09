@@ -605,7 +605,8 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
   async function loadReports(){
     const supabase=getSupabase(); if(!supabase)return;
     const r=await supabase.from("match_reports").select("*,match:matches(id,home_score,away_score,status,rescheduled_at,interruption_reason,interruption_minute,home:teams!matches_home_team_id_fkey(name),away:teams!matches_away_team_id_fkey(name))").order("created_at",{ascending:false});
-    if(!r.error)setReports(r.data||[]);
+    if(r.error){setError("Could not load reporting match cards: "+r.error.message);return;}
+    setReports(r.data||[]);
   }
   async function saveReport(){
     if(!reportMatch)return;
