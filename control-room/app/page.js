@@ -685,8 +685,6 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
     if(starters.length!==11||slots.some(slot=>!starters.some(x=>x.slot===slot.id))){setError("Select one player for every starting position: GK, defenders, midfielders and forwards must all be filled.");return;}
     const starterIds=starters.map(x=>x.player_id);
     if(new Set(starterIds).size!==starterIds.length){setError("A player cannot occupy more than one starting position.");return;}
-    const invalidSlot=starters.find(x=>!playerMatchesLineupSlot(players.find(p=>p.id===x.player_id),slots.find(slot=>slot.id===x.slot)));
-    if(invalidSlot){setError("Each starter must match the selected positional slot. Check the starting-position selections before saving.");return;}
     const captain=selected.find(x=>x.player_id===lineup?.captain_player_id)?.player_id||lineup?.captain_player_id;
     if(!captain||!starters.some(x=>x.player_id===captain)){setError("Select a captain from the starting XI.");return;}
     const supabase=getSupabase();
