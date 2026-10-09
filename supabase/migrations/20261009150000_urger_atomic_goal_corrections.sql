@@ -10,8 +10,10 @@ begin
  select * into m from public.matches where id=p_match_id for update;
  if not found then raise exception 'Match unavailable or score update not permitted'; end if;
  if p_team_id is null or p_team_id not in (m.home_team_id,m.away_team_id) then raise exception 'Event team is not in this match'; end if;
+ if p_player_id is not null and not exists(select 1 from public.players where id=p_player_id and team_id=p_team_id) then raise exception 'Goal scorer must belong to the selected team'; end if;
+ if p_secondary_player_id is not null and (p_secondary_player_id=p_player_id or not exists(select 1 from public.players where id=p_secondary_player_id and team_id=p_team_id)) then raise exception 'Assist player must be a different player from the same team'; end if;
  insert into public.match_events(match_id,team_id,player_id,secondary_player_id,event_type,minute,extra_minute,details)
- values(p_match_id,p_team_id,p_player_id,p_secondary_player_id,p_event_type,greatest(0,coalesce(p_minute,0)),p_extra_minute,p_details) returning id into eid;
+ values(p_match_id,p_team_id,p_player_id,p_secondary_player_id,p_event_type,greatest(0,coalesce(p_minute,0)),case when p_extra_minute is null then null else greatest(0,p_extra_minute) end,p_details) returning id into eid;
  scoring_team:=case when p_event_type='own_goal' and p_team_id=m.home_team_id then m.away_team_id when p_event_type='own_goal' then m.home_team_id else p_team_id end;
  if scoring_team=m.home_team_id then update public.matches set home_score=coalesce(home_score,0)+1 where id=p_match_id returning home_score,away_score into hs,ascore;
  else update public.matches set away_score=coalesce(away_score,0)+1 where id=p_match_id returning home_score,away_score into hs,ascore; end if;
@@ -32,6 +34,7 @@ begin
  select full_name into scorer from public.players where id=e.player_id;
  credited:=case when e.event_type='own_goal' and e.team_id=m.home_team_id then m.away_team_id when e.event_type='own_goal' then m.home_team_id else e.team_id end;
  update public.match_events set event_type='goal_disallowed',details=concat_ws(' · ','GOAL DISALLOWED — '||trim(p_reason),'Original event: '||e.event_type||coalesce(' by '||scorer,''),nullif(e.details,'')) where id=e.id;
+ if not found then raise exception 'Goal correction is not permitted'; end if;
  if credited=m.home_team_id then update public.matches set home_score=coalesce(home_score,0)-1 where id=m.id and coalesce(home_score,0)>0 returning home_score,away_score into hs,ascore;
  else update public.matches set away_score=coalesce(away_score,0)-1 where id=m.id and coalesce(away_score,0)>0 returning home_score,away_score into hs,ascore; end if;
  if not found then raise exception 'Score is already zero or update not permitted; correction rolled back'; end if;
