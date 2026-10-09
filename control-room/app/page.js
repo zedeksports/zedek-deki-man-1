@@ -502,15 +502,15 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
       if(!liveEventPlayerIds(teamId,"bench").has(secondaryId)){setError("The incoming player must be an unused substitute from the match lineup.");setSaving(false);return;}
     }
     const eventDetails=eventForm.type==="player_rating"?`Rating: ${Number(eventForm.rating||7).toFixed(1)}/10${eventForm.details?` · ${eventForm.details}`:""}`:(eventForm.details||null);
-    const result=await supabase.from("match_events").insert({match_id:liveMatch.id,team_id:teamId,player_id:playerId,secondary_player_id:secondaryId,coach_id:coachId,event_type:eventForm.type,minute,extra_minute:eventForm.extra_minute?Number(eventForm.extra_minute):null,details:eventDetails});
-    if(result.error){setError(result.error.message);setSaving(false);return;}
-    if((eventForm.type==="goal"||eventForm.type==="own_goal")&&teamId){
-      const scoringTeam=eventForm.type==="own_goal"?(teamId===liveMatch.home_team_id?liveMatch.away_team_id:liveMatch.home_team_id):teamId;
-      const home=scoringTeam===liveMatch.home_team_id;
-      const values=home?{home_score:(liveMatch.home_score||0)+1}:{away_score:(liveMatch.away_score||0)+1};
-      const upd=await supabase.from("matches").update(values).eq("id",liveMatch.id);
-      if(upd.error){setError(upd.error.message);setSaving(false);return;}
-      setLiveMatch({...liveMatch,...values});
+    if(["goal","own_goal"].includes(eventForm.type)){
+      const saved=await supabase.rpc("record_match_goal",{p_match_id:liveMatch.id,p_team_id:teamId,p_player_id:playerId,p_secondary_player_id:secondaryId,p_event_type:eventForm.type,p_minute:minute,p_extra_minute:eventForm.extra_minute?Number(eventForm.extra_minute):null,p_details:eventDetails});
+      const row=Array.isArray(saved.data)?saved.data[0]:saved.data;
+      if(saved.error||!row){setError(saved.error?.message||"Goal was not recorded because no updated score was returned.");setSaving(false);return;}
+      setLiveMatch({...liveMatch,home_score:row.home_score,away_score:row.away_score});
+      setMatches(items=>items.map(m=>m.id===liveMatch.id?{...m,home_score:row.home_score,away_score:row.away_score}:m));
+    }else{
+      const result=await supabase.from("match_events").insert({match_id:liveMatch.id,team_id:teamId,player_id:playerId,secondary_player_id:secondaryId,coach_id:coachId,event_type:eventForm.type,minute,extra_minute:eventForm.extra_minute?Number(eventForm.extra_minute):null,details:eventDetails});
+      if(result.error){setError(result.error.message);setSaving(false);return;}
     }
     setEventForm({type:"goal",team_id:"",player_id:"",secondary_player_id:"",coach_id:"",actor_type:"player",minute:"",extra_minute:"",rating:"7.0",details:""});
     setSaving(false);await loadLive(liveMatch.id);
@@ -519,18 +519,14 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
     if(!liveMatch||!x||!["goal","own_goal"].includes(x.event_type))return;
     const reason=window.prompt("Confirm this goal correction / disallow decision. Enter the official reason:");
     if(!reason||!reason.trim())return;
-    const originalType=x.event_type, originalDetails=x.details||null;
-    const scoringTeam=originalType==="own_goal"?(x.team_id===liveMatch.home_team_id?liveMatch.away_team_id:liveMatch.home_team_id):x.team_id;
-    const home=scoringTeam===liveMatch.home_team_id, current=Number(home?liveMatch.home_score:liveMatch.away_score)||0;
-    if(current<1){setError("Cannot correct this goal because the current score is already zero for the credited team.");return;}
     setSaving(true);setError("");setNotice("");
-    const correctionDetails=[`GOAL DISALLOWED — ${reason.trim()}`,`Original event: ${originalType}${x.player?.full_name?` by ${x.player.full_name}`:""}`,originalDetails].filter(Boolean).join(" · ");
-    const eventUpdate=await getSupabase().from("match_events").update({event_type:"goal_disallowed",details:correctionDetails}).eq("id",x.id).eq("match_id",liveMatch.id).in("event_type",["goal","own_goal"]).select("id").maybeSingle();
-    if(eventUpdate.error||!eventUpdate.data){setSaving(false);setError(eventUpdate.error?.message||"This goal was already corrected or could not be found. Refresh and try again.");return;}
-    const scoreValues=home?{home_score:current-1}:{away_score:current-1};
-    const scoreUpdate=await getSupabase().from("matches").update(scoreValues).eq("id",liveMatch.id);
-    if(scoreUpdate.error){const rollback=await getSupabase().from("match_events").update({event_type:originalType,details:originalDetails}).eq("id",x.id).eq("match_id",liveMatch.id);setSaving(false);setError("The score could not be corrected: "+scoreUpdate.error.message+(rollback.error?" Event rollback also failed; inspect this match immediately.":" The original goal event was restored."));return;}
-    setLiveMatch({...liveMatch,...scoreValues});setSaving(false);setNotice("Goal correction saved. Score and event feed updated.");await loadLive(liveMatch.id);
+    const result=await getSupabase().rpc("correct_match_goal",{p_event_id:x.id,p_reason:reason.trim()});
+    const row=Array.isArray(result.data)?result.data[0]:result.data;
+    if(result.error||!row){setSaving(false);setError(result.error?.message||"The goal correction did not return an updated score.");return;}
+    setLiveMatch({...liveMatch,home_score:row.home_score,away_score:row.away_score});
+    setMatches(items=>items.map(m=>m.id===liveMatch.id?{...m,home_score:row.home_score,away_score:row.away_score}:m));
+    setSaving(false);setNotice("Goal correction committed. Score and event feed updated.");
+    await loadLive(liveMatch.id);
   }
   async function rebuildOfficialStats(){
     const supabase=getSupabase(); if(!supabase)return;
