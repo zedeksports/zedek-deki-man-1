@@ -318,6 +318,7 @@ async function deletePublicOfficialProfile(x){if(!window.confirm("Remove the pub
     if(saving)return;
     setSaving(true);setError("");setNotice("");
     const supabase=getSupabase(),isNew=!editingTeamId;
+    let hasSimilarTeamName=false;
     const name=team.name.trim();
     if(!name){setSaving(false);setError("Enter the team name before registering.");return;}
     if(isNew&&!team.consent_confirmed){setSaving(false);setError("Consent confirmation is required before registering a team.");return;}
@@ -325,7 +326,7 @@ async function deletePublicOfficialProfile(x){if(!window.confirm("Remove the pub
     if(isNew){
       const similar=await supabase.from("teams").select("id,logo_url,area,home_venue").ilike("name",name).limit(5);
       if(similar.error){setSaving(false);setError("Could not check for similar team records: "+similar.error.message);return;}
-      if(similar.data?.length)setNotice("A team with this name already exists. Registration is allowed; verify the area, venue and uploaded logo identify the correct team.");
+      if(similar.data?.length)hasSimilarTeamName=true;
     }
     const values={name,short_name:team.short_name.trim()||null,area:team.area.trim()||null,home_venue:team.home_venue.trim()||null};
     const result=isNew?await supabase.from("teams").insert(values).select("*").single():await supabase.from("teams").update(values).eq("id",editingTeamId).select("*").single();
@@ -354,7 +355,7 @@ async function deletePublicOfficialProfile(x){if(!window.confirm("Remove the pub
     }
     setSaving(false);setEditingTeamId("");
     setTeam({id:"",name:"",short_name:"",area:"",home_venue:"",image:null,consent_confirmed:false,holder_name:""});
-    setNotice(isNew?"Team registered successfully. All submitted details and the logo were saved.":"Team updated successfully.");
+    setNotice((isNew?"Team registered successfully. All submitted details and the logo were saved.":"Team updated successfully.")+(isNew&&hasSimilarTeamName?" A team with this name already exists; check the area, venue and logo to distinguish the records.":""));
     await refresh();
   }
   function editTeam(x){setEditingTeamId(x.id);setTeam({id:x.id,name:x.name||"",short_name:x.short_name||"",area:x.area||"",home_venue:x.home_venue||"",image:null,consent_confirmed:false,holder_name:""});setTab("teams");window.scrollTo({top:0,behavior:"smooth"});}
@@ -436,6 +437,7 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
     if(saving)return;
     setSaving(true);setError("");setNotice("");
     const supabase=getSupabase(),isNew=!editingPlayerId;
+    let hasSimilarPlayerName=false;
     const fullName=player.full_name.trim();
     if(!player.team_id){setSaving(false);setError("Select a team before registering the player.");return;}
     if(!fullName){setSaving(false);setError("Enter the player's full name before registering.");return;}
@@ -445,7 +447,7 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
     if(isNew){
       const similar=await supabase.from("players").select("id,photo_url,shirt_number,date_of_birth").eq("team_id",player.team_id).ilike("full_name",fullName).limit(5);
       if(similar.error){setSaving(false);setError("Could not check for similar player records: "+similar.error.message);return;}
-      if(similar.data?.length)setNotice("A player with this name already exists in this team. Registration is allowed; verify the photo and player details identify the correct person.");
+      if(similar.data?.length)hasSimilarPlayerName=true;
     }
     const values={team_id:player.team_id,full_name:fullName,shirt_number:player.shirt_number?Number(player.shirt_number):null,position:player.position.trim()||null,date_of_birth:player.date_of_birth||null,nationality:player.nationality.trim()||null,height_cm:player.height_cm?Number(player.height_cm):null,preferred_foot:player.preferred_foot||null,market_transfer_value:player.market_transfer_value.trim()||null};
     const result=isNew?await supabase.from("players").insert(values).select("*").single():await supabase.from("players").update(values).eq("id",editingPlayerId).select("*").single();
@@ -474,7 +476,7 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
     }
     setSaving(false);setEditingPlayerId("");
     setPlayer({id:"",team_id:"",full_name:"",shirt_number:"",position:"",date_of_birth:"",nationality:"",height_cm:"",preferred_foot:"",market_transfer_value:"",image:null,existing_photo_url:"",consent_confirmed:false,authority_type:"self",holder_name:"",guardian_name:"",guardian_contact:""});
-    setNotice(isNew?"Player registered successfully. All submitted details and the photo were saved.":"Player updated successfully.");
+    setNotice((isNew?"Player registered successfully. All submitted details and the photo were saved.":"Player updated successfully.")+(isNew&&hasSimilarPlayerName?" A player with this name already exists in this team; check the photo and player details to distinguish the records.":""));
     await refresh();
   }
   function editPlayer(x){setEditingPlayerId(x.id);setPlayer({id:x.id,team_id:x.team_id||"",full_name:x.full_name||"",shirt_number:x.shirt_number??"",position:x.position||"",date_of_birth:x.date_of_birth||"",nationality:x.nationality||"",height_cm:x.height_cm??"",preferred_foot:x.preferred_foot||"",market_transfer_value:x.market_transfer_value||"",image:null,existing_photo_url:x.photo_url||"",consent_confirmed:false,authority_type:"self",holder_name:"",guardian_name:"",guardian_contact:""});setTab("players");window.scrollTo({top:0,behavior:"smooth"});}
