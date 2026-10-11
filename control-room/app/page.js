@@ -251,28 +251,46 @@ async function deletePublicOfficialProfile(x){if(!window.confirm("Remove the pub
     if(!file.type?.startsWith("image/"))throw new Error("Please select an image file.");
     const isLogo=kind==="logo";
     const MAX_DIMENSION=isLogo?1600:1200;
+    const MIN_DIMENSION=320;
     const TARGET_BYTES=isLogo?600*1024:300*1024;
     const MIN_QUALITY=isLogo?0.80:0.55;
     const START_QUALITY=isLogo?0.94:0.82;
     const QUALITY_STEP=isLogo?0.05:0.07;
     const bitmap=await createImageBitmap(file);
-    const scale=Math.min(1,MAX_DIMENSION/Math.max(bitmap.width,bitmap.height));
-    const width=Math.max(1,Math.round(bitmap.width*scale));
-    const height=Math.max(1,Math.round(bitmap.height*scale));
-    const canvas=document.createElement("canvas");
-    canvas.width=width;canvas.height=height;
-    const ctx=canvas.getContext("2d");
-    if(!ctx){bitmap.close();throw new Error("Image processing is not supported in this browser.");}
-    ctx.drawImage(bitmap,0,0,width,height);
-    bitmap.close();
-    let quality=START_QUALITY;
-    let blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/webp",quality));
-    while(blob&&blob.size>TARGET_BYTES&&quality>MIN_QUALITY){
-      quality=Math.max(MIN_QUALITY,quality-QUALITY_STEP);
-      blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/webp",quality));
+    try{
+      let scale=Math.min(1,MAX_DIMENSION/Math.max(bitmap.width,bitmap.height));
+      const canvas=document.createElement("canvas");
+      const ctx=canvas.getContext("2d");
+      if(!ctx)throw new Error("Image processing is not supported in this browser.");
+      while(true){
+        const width=Math.max(1,Math.round(bitmap.width*scale));
+        const height=Math.max(1,Math.round(bitmap.height*scale));
+        canvas.width=width;canvas.height=height;
+        ctx.clearRect(0,0,width,height);
+        // Drawing onto a transparent canvas preserves transparent team and competition crests.
+        ctx.drawImage(bitmap,0,0,width,height);
+        let quality=START_QUALITY;
+        let blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/webp",quality));
+        if(!blob)throw new Error("Could not optimize the selected image.");
+        while(blob.size>TARGET_BYTES&&quality>MIN_QUALITY){
+          quality=Math.max(MIN_QUALITY,quality-QUALITY_STEP);
+          blob=await new Promise(resolve=>canvas.toBlob(resolve,"image/webp",quality));
+          if(!blob)throw new Error("Could not optimize the selected image.");
+        }
+        if(blob.size<=TARGET_BYTES){
+          return new File([blob],"optimized.webp",{type:"image/webp",lastModified:Date.now()});
+        }
+        const largestDimension=Math.max(width,height);
+        if(largestDimension<=MIN_DIMENSION){
+          throw new Error("This image could not be reduced below "+Math.round(TARGET_BYTES/1024)+" KB without risking further quality loss. Please choose a simpler or smaller image.");
+        }
+        // If compression alone is insufficient, progressively reduce dimensions and retry.
+        scale*=Math.max(0.65,Math.min(0.85,Math.sqrt(TARGET_BYTES/blob.size)*0.92));
+        scale=Math.min(scale,(largestDimension*0.85)/Math.max(bitmap.width,bitmap.height));
+      }
+    }finally{
+      bitmap.close();
     }
-    if(!blob)throw new Error("Could not optimize the selected image.");
-    return new File([blob],"optimized.webp",{type:"image/webp",lastModified:Date.now()});
   }
   async function uploadAsset(file,folder,id,kind="photo"){
     if(!file)return null;
