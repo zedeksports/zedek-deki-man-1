@@ -301,17 +301,61 @@ async function deletePublicOfficialProfile(x){if(!window.confirm("Remove the pub
     if(upload.error)throw upload.error;
     return supabase.storage.from("sports-assets").getPublicUrl(path).data.publicUrl;
   }
+
+  async function removeUploadedAsset(publicUrl){
+    if(!publicUrl)return;
+    const marker="/storage/v1/object/public/sports-assets/";
+    const index=publicUrl.indexOf(marker);
+    if(index<0)return;
+    const encodedPath=publicUrl.slice(index+marker.length).split("?")[0];
+    let path;
+    try{path=decodeURIComponent(encodedPath);}catch{path=encodedPath;}
+    if(path)await getSupabase().storage.from("sports-assets").remove([path]);
+  }
+
   async function saveTeam(e){
-    e.preventDefault();setSaving(true);setError("");setNotice("");const supabase=getSupabase();const isNew=!editingTeamId;
+    e.preventDefault();
+    if(saving)return;
+    setSaving(true);setError("");setNotice("");
+    const supabase=getSupabase(),isNew=!editingTeamId;
+    const name=team.name.trim();
+    if(!name){setSaving(false);setError("Enter the team name before registering.");return;}
     if(isNew&&!team.consent_confirmed){setSaving(false);setError("Consent confirmation is required before registering a team.");return;}
-    if(isNew&&!team.holder_name.trim()){setSaving(false);setError("Enter the authorised team representative's name.");return;}
-    const values={name:team.name.trim(),short_name:team.short_name.trim()||null,area:team.area.trim()||null,home_venue:team.home_venue.trim()||null};
-    const result=editingTeamId?await supabase.from("teams").update(values).eq("id",editingTeamId).select("*").single():await supabase.from("teams").insert(values).select("*").single();
-    if(result.error){setSaving(false);setError(result.error.message);return;}
-    if(isNew){try{await recordRegistrationConsent({subjectType:"team",subjectId:result.data.id,authorityType:"team_authorized_representative",holderName:team.holder_name});}catch(err){await supabase.from("teams").delete().eq("id",result.data.id);setSaving(false);setError("Team was not registered because the consent record could not be saved: "+err.message);return;}}
-    try{const logo_url=await uploadAsset(team.image,"teams",result.data.id,"logo");if(logo_url){const updated=await supabase.from("teams").update({logo_url}).eq("id",result.data.id).select("id,logo_url").single();if(updated.error)throw updated.error;if(updated.data?.logo_url!==logo_url)throw new Error("New logo URL was not confirmed as saved.");}}
-    catch(err){setSaving(false);setError((editingTeamId?"Team updated":"Team saved")+", but logo upload failed: "+err.message);await refresh();return;}
-    const wasEditing=!!editingTeamId;setSaving(false);setEditingTeamId("");setTeam({id:"",name:"",short_name:"",area:"",home_venue:"",image:null,consent_confirmed:false,holder_name:""});setNotice(wasEditing?"Team updated successfully.":"Team registered successfully.");await refresh();
+    if(isNew&&!team.holder_name?.trim()){setSaving(false);setError("Enter the authorised team representative's name.");return;}
+    if(isNew){
+      const duplicate=await supabase.from("teams").select("id").ilike("name",name).limit(1);
+      if(duplicate.error){setSaving(false);setError("Could not validate the team name: "+duplicate.error.message);return;}
+      if(duplicate.data?.length){setSaving(false);setError("A team with this name is already registered. Check the team registry or use a different name.");return;}
+    }
+    const values={name,short_name:team.short_name.trim()||null,area:team.area.trim()||null,home_venue:team.home_venue.trim()||null};
+    const result=isNew?await supabase.from("teams").insert(values).select("*").single():await supabase.from("teams").update(values).eq("id",editingTeamId).select("*").single();
+    if(result.error){setSaving(false);setError(result.error.code==="23505"?"A team with this name is already registered.": "Team could not be saved: "+result.error.message);return;}
+    const teamId=result.data.id;
+    let uploadedLogoUrl=null;
+    try{
+      if(isNew)await recordRegistrationConsent({subjectType:"team",subjectId:teamId,authorityType:"team_authorized_representative",holderName:team.holder_name});
+      uploadedLogoUrl=await uploadAsset(team.image,"teams",teamId,"logo");
+      if(uploadedLogoUrl){
+        const updated=await supabase.from("teams").update({logo_url:uploadedLogoUrl,updated_at:new Date().toISOString()}).eq("id",teamId).select("id,logo_url").single();
+        if(updated.error)throw updated.error;
+        if(updated.data?.logo_url!==uploadedLogoUrl)throw new Error("The new team logo could not be confirmed as saved.");
+      }
+    }catch(err){
+      if(isNew){
+        if(uploadedLogoUrl){try{await removeUploadedAsset(uploadedLogoUrl);}catch{}}
+        await supabase.from("data_consents").delete().eq("subject_type","team").eq("subject_id",teamId);
+        const rollback=await supabase.from("teams").delete().eq("id",teamId);
+        setSaving(false);
+        setError("Team registration was not completed"+(rollback.error?"; cleanup also needs admin attention":"")+" because consent or logo processing failed: "+err.message+". Please correct the issue and try again.");
+        await refresh();return;
+      }
+      setSaving(false);setError("Team details were saved, but the logo could not be updated: "+err.message+". The existing team and logo were retained where possible.");
+      await refresh();return;
+    }
+    setSaving(false);setEditingTeamId("");
+    setTeam({id:"",name:"",short_name:"",area:"",home_venue:"",image:null,consent_confirmed:false,holder_name:""});
+    setNotice(isNew?"Team registered successfully. All submitted details and the logo were saved.":"Team updated successfully.");
+    await refresh();
   }
   function editTeam(x){setEditingTeamId(x.id);setTeam({id:x.id,name:x.name||"",short_name:x.short_name||"",area:x.area||"",home_venue:x.home_venue||"",image:null,consent_confirmed:false,holder_name:""});setTab("teams");window.scrollTo({top:0,behavior:"smooth"});}
   async function deleteTeam(x){if(!window.confirm("Delete "+x.name+"? This cannot be undone."))return;setSaving(true);setError("");setNotice("");const supabase=getSupabase();const result=await supabase.from("teams").delete().eq("id",x.id);if(result.error){setSaving(false);setError("Team could not be deleted: "+result.error.message);return;}setSaving(false);setNotice("Team deleted successfully.");await refresh();}
@@ -388,17 +432,50 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
   }
 
   async function savePlayer(e){
-    e.preventDefault();setSaving(true);setError("");setNotice("");const supabase=getSupabase();const isNew=!editingPlayerId;
+    e.preventDefault();
+    if(saving)return;
+    setSaving(true);setError("");setNotice("");
+    const supabase=getSupabase(),isNew=!editingPlayerId;
+    const fullName=player.full_name.trim();
+    if(!player.team_id){setSaving(false);setError("Select a team before registering the player.");return;}
+    if(!fullName){setSaving(false);setError("Enter the player's full name before registering.");return;}
     if(isNew&&!player.consent_confirmed){setSaving(false);setError("Consent confirmation is required before registering a player.");return;}
-    if(isNew&&!player.holder_name.trim()){setSaving(false);setError("Enter the name of the player, guardian or authorised representative confirming consent.");return;}
+    if(isNew&&!player.holder_name?.trim()){setSaving(false);setError("Enter the name of the player, guardian or authorised representative confirming consent.");return;}
     if(isNew&&player.authority_type==="parent_or_guardian"&&(!player.guardian_name.trim()||!player.guardian_contact.trim())){setSaving(false);setError("Guardian name and contact are required for a minor.");return;}
-    const values={team_id:player.team_id,full_name:player.full_name.trim(),shirt_number:player.shirt_number?Number(player.shirt_number):null,position:player.position.trim()||null,date_of_birth:player.date_of_birth||null,nationality:player.nationality.trim()||null,height_cm:player.height_cm?Number(player.height_cm):null,preferred_foot:player.preferred_foot||null,market_transfer_value:player.market_transfer_value.trim()||null};
-    const result=editingPlayerId?await supabase.from("players").update(values).eq("id",editingPlayerId).select("*").single():await supabase.from("players").insert(values).select("*").single();
-    if(result.error){setSaving(false);setError(result.error.message);return;}
-    if(isNew){try{await recordRegistrationConsent({subjectType:"player",subjectId:result.data.id,authorityType:player.authority_type,holderName:player.holder_name,guardianName:player.guardian_name,guardianContact:player.guardian_contact});}catch(err){await supabase.from("players").delete().eq("id",result.data.id);setSaving(false);setError("Player was not registered because the consent record could not be saved: "+err.message);return;}}
-    try{const photo_url=await uploadAsset(player.image,"players",result.data.id);if(photo_url){const updated=await supabase.from("players").update({photo_url}).eq("id",result.data.id);if(updated.error)throw updated.error;}}
-    catch(err){setSaving(false);setError((editingPlayerId?"Player updated":"Player saved")+", but photo upload failed: "+err.message);await refresh();return;}
-    const wasEditing=!!editingPlayerId;setSaving(false);setEditingPlayerId("");setPlayer({id:"",team_id:"",full_name:"",shirt_number:"",position:"",date_of_birth:"",image:null,existing_photo_url:"",consent_confirmed:false,authority_type:"self",holder_name:"",guardian_name:"",guardian_contact:""});setNotice(wasEditing?"Player updated successfully.":"Player registered successfully.");await refresh();
+    if(isNew){
+      const duplicate=await supabase.from("players").select("id").eq("team_id",player.team_id).ilike("full_name",fullName).limit(1);
+      if(duplicate.error){setSaving(false);setError("Could not validate the player record: "+duplicate.error.message);return;}
+      if(duplicate.data?.length){setSaving(false);setError("A player with this name is already registered for this team. Check the roster before continuing.");return;}
+    }
+    const values={team_id:player.team_id,full_name:fullName,shirt_number:player.shirt_number?Number(player.shirt_number):null,position:player.position.trim()||null,date_of_birth:player.date_of_birth||null,nationality:player.nationality.trim()||null,height_cm:player.height_cm?Number(player.height_cm):null,preferred_foot:player.preferred_foot||null,market_transfer_value:player.market_transfer_value.trim()||null};
+    const result=isNew?await supabase.from("players").insert(values).select("*").single():await supabase.from("players").update(values).eq("id",editingPlayerId).select("*").single();
+    if(result.error){setSaving(false);setError(result.error.code==="23505"?"This player conflicts with an existing registration. Check the team roster.":"Player could not be saved: "+result.error.message);return;}
+    const playerId=result.data.id;
+    let uploadedPhotoUrl=null;
+    try{
+      if(isNew)await recordRegistrationConsent({subjectType:"player",subjectId:playerId,authorityType:player.authority_type,holderName:player.holder_name,guardianName:player.guardian_name,guardianContact:player.guardian_contact});
+      uploadedPhotoUrl=await uploadAsset(player.image,"players",playerId);
+      if(uploadedPhotoUrl){
+        const updated=await supabase.from("players").update({photo_url:uploadedPhotoUrl,updated_at:new Date().toISOString()}).eq("id",playerId).select("id,photo_url").single();
+        if(updated.error)throw updated.error;
+        if(updated.data?.photo_url!==uploadedPhotoUrl)throw new Error("The new player photo could not be confirmed as saved.");
+      }
+    }catch(err){
+      if(isNew){
+        if(uploadedPhotoUrl){try{await removeUploadedAsset(uploadedPhotoUrl);}catch{}}
+        await supabase.from("data_consents").delete().eq("subject_type","player").eq("subject_id",playerId);
+        const rollback=await supabase.from("players").delete().eq("id",playerId);
+        setSaving(false);
+        setError("Player registration was not completed"+(rollback.error?"; cleanup also needs admin attention":"")+" because consent or photo processing failed: "+err.message+". Please correct the issue and try again.");
+        await refresh();return;
+      }
+      setSaving(false);setError("Player details were saved, but the photo could not be updated: "+err.message+". The existing player record was retained where possible.");
+      await refresh();return;
+    }
+    setSaving(false);setEditingPlayerId("");
+    setPlayer({id:"",team_id:"",full_name:"",shirt_number:"",position:"",date_of_birth:"",nationality:"",height_cm:"",preferred_foot:"",market_transfer_value:"",image:null,existing_photo_url:"",consent_confirmed:false,authority_type:"self",holder_name:"",guardian_name:"",guardian_contact:""});
+    setNotice(isNew?"Player registered successfully. All submitted details and the photo were saved.":"Player updated successfully.");
+    await refresh();
   }
   function editPlayer(x){setEditingPlayerId(x.id);setPlayer({id:x.id,team_id:x.team_id||"",full_name:x.full_name||"",shirt_number:x.shirt_number??"",position:x.position||"",date_of_birth:x.date_of_birth||"",nationality:x.nationality||"",height_cm:x.height_cm??"",preferred_foot:x.preferred_foot||"",market_transfer_value:x.market_transfer_value||"",image:null,existing_photo_url:x.photo_url||"",consent_confirmed:false,authority_type:"self",holder_name:"",guardian_name:"",guardian_contact:""});setTab("players");window.scrollTo({top:0,behavior:"smooth"});}
   async function saveMovement(e){
