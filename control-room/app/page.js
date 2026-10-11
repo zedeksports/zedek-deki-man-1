@@ -332,9 +332,18 @@ async function deletePublicOfficialProfile(x){if(!window.confirm("Remove the pub
     const result=isNew?await supabase.from("teams").insert(values).select("*").single():await supabase.from("teams").update(values).eq("id",editingTeamId).select("*").single();
     if(result.error){setSaving(false);setError(result.error.code==="23505"?"This team record conflicts with another unique field. Check the entered details.":"Team could not be saved: "+result.error.message);return;}
     const teamId=result.data.id;
+    if(isNew){
+      try{
+        await recordRegistrationConsent({subjectType:"team",subjectId:teamId,authorityType:"team_authorized_representative",holderName:team.holder_name});
+      }catch(err){
+        const rollback=await supabase.from("teams").delete().eq("id",teamId);
+        setSaving(false);
+        setError("Team registration was not completed because consent could not be recorded: "+err.message+(rollback.error?"; cleanup also needs admin attention: "+rollback.error.message:"")+". Please correct the issue and try again.");
+        await refresh();return;
+      }
+    }
     let uploadedLogoUrl=null;
     try{
-      if(isNew)await recordRegistrationConsent({subjectType:"team",subjectId:teamId,authorityType:"team_authorized_representative",holderName:team.holder_name});
       uploadedLogoUrl=await uploadAsset(team.image,"teams",teamId,"logo");
       if(uploadedLogoUrl){
         const updated=await supabase.from("teams").update({logo_url:uploadedLogoUrl,updated_at:new Date().toISOString()}).eq("id",teamId).select("id,logo_url").single();
@@ -342,15 +351,9 @@ async function deletePublicOfficialProfile(x){if(!window.confirm("Remove the pub
         if(updated.data?.logo_url!==uploadedLogoUrl)throw new Error("The new team logo could not be confirmed as saved.");
       }
     }catch(err){
-      if(isNew){
-        if(uploadedLogoUrl){try{await removeUploadedAsset(uploadedLogoUrl);}catch{}}
-        await supabase.from("data_consents").delete().eq("subject_type","team").eq("subject_id",teamId);
-        const rollback=await supabase.from("teams").delete().eq("id",teamId);
-        setSaving(false);
-        setError("Team registration was not completed"+(rollback.error?"; cleanup also needs admin attention":"")+" because consent or logo processing failed: "+err.message+". Please correct the issue and try again.");
-        await refresh();return;
-      }
-      setSaving(false);setError("Team details were saved, but the logo could not be updated: "+err.message+". The existing team and logo were retained where possible.");
+      if(uploadedLogoUrl){try{await removeUploadedAsset(uploadedLogoUrl);}catch{}}
+      setSaving(false);
+      setError((isNew?"Team registration and consent were saved, but the logo upload failed. The team record has been preserved; edit the team and retry the logo upload. ":"Team details were saved, but the logo could not be updated; the existing team record was preserved. ")+err.message);
       await refresh();return;
     }
     setSaving(false);setEditingTeamId("");
@@ -453,9 +456,18 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
     const result=isNew?await supabase.from("players").insert(values).select("*").single():await supabase.from("players").update(values).eq("id",editingPlayerId).select("*").single();
     if(result.error){setSaving(false);setError(result.error.code==="23505"?"This player record conflicts with another unique field. Check the entered details.":"Player could not be saved: "+result.error.message);return;}
     const playerId=result.data.id;
+    if(isNew){
+      try{
+        await recordRegistrationConsent({subjectType:"player",subjectId:playerId,authorityType:player.authority_type,holderName:player.holder_name,guardianName:player.guardian_name,guardianContact:player.guardian_contact});
+      }catch(err){
+        const rollback=await supabase.from("players").delete().eq("id",playerId);
+        setSaving(false);
+        setError("Player registration was not completed because consent could not be recorded: "+err.message+(rollback.error?"; cleanup also needs admin attention: "+rollback.error.message:"")+". Please correct the issue and try again.");
+        await refresh();return;
+      }
+    }
     let uploadedPhotoUrl=null;
     try{
-      if(isNew)await recordRegistrationConsent({subjectType:"player",subjectId:playerId,authorityType:player.authority_type,holderName:player.holder_name,guardianName:player.guardian_name,guardianContact:player.guardian_contact});
       uploadedPhotoUrl=await uploadAsset(player.image,"players",playerId);
       if(uploadedPhotoUrl){
         const updated=await supabase.from("players").update({photo_url:uploadedPhotoUrl,updated_at:new Date().toISOString()}).eq("id",playerId).select("id,photo_url").single();
@@ -463,15 +475,9 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
         if(updated.data?.photo_url!==uploadedPhotoUrl)throw new Error("The new player photo could not be confirmed as saved.");
       }
     }catch(err){
-      if(isNew){
-        if(uploadedPhotoUrl){try{await removeUploadedAsset(uploadedPhotoUrl);}catch{}}
-        await supabase.from("data_consents").delete().eq("subject_type","player").eq("subject_id",playerId);
-        const rollback=await supabase.from("players").delete().eq("id",playerId);
-        setSaving(false);
-        setError("Player registration was not completed"+(rollback.error?"; cleanup also needs admin attention":"")+" because consent or photo processing failed: "+err.message+". Please correct the issue and try again.");
-        await refresh();return;
-      }
-      setSaving(false);setError("Player details were saved, but the photo could not be updated: "+err.message+". The existing player record was retained where possible.");
+      if(uploadedPhotoUrl){try{await removeUploadedAsset(uploadedPhotoUrl);}catch{}}
+      setSaving(false);
+      setError((isNew?"Player registration and consent were saved, but the photo upload failed. The player record has been preserved; edit the player and retry the photo upload. ":"Player details were saved, but the photo could not be updated; the existing player record was preserved. ")+err.message);
       await refresh();return;
     }
     setSaving(false);setEditingPlayerId("");
