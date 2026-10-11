@@ -323,13 +323,13 @@ async function deletePublicOfficialProfile(x){if(!window.confirm("Remove the pub
     if(isNew&&!team.consent_confirmed){setSaving(false);setError("Consent confirmation is required before registering a team.");return;}
     if(isNew&&!team.holder_name?.trim()){setSaving(false);setError("Enter the authorised team representative's name.");return;}
     if(isNew){
-      const duplicate=await supabase.from("teams").select("id").ilike("name",name).limit(1);
-      if(duplicate.error){setSaving(false);setError("Could not validate the team name: "+duplicate.error.message);return;}
-      if(duplicate.data?.length){setSaving(false);setError("A team with this name is already registered. Check the team registry or use a different name.");return;}
+      const similar=await supabase.from("teams").select("id,logo_url,area,home_venue").ilike("name",name).limit(5);
+      if(similar.error){setSaving(false);setError("Could not check for similar team records: "+similar.error.message);return;}
+      if(similar.data?.length)setNotice("A team with this name already exists. Registration is allowed; verify the area, venue and uploaded logo identify the correct team.");
     }
     const values={name,short_name:team.short_name.trim()||null,area:team.area.trim()||null,home_venue:team.home_venue.trim()||null};
     const result=isNew?await supabase.from("teams").insert(values).select("*").single():await supabase.from("teams").update(values).eq("id",editingTeamId).select("*").single();
-    if(result.error){setSaving(false);setError(result.error.code==="23505"?"A team with this name is already registered.": "Team could not be saved: "+result.error.message);return;}
+    if(result.error){setSaving(false);setError(result.error.code==="23505"?"This team record conflicts with another unique field. Check the entered details.":"Team could not be saved: "+result.error.message);return;}
     const teamId=result.data.id;
     let uploadedLogoUrl=null;
     try{
@@ -443,13 +443,13 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
     if(isNew&&!player.holder_name?.trim()){setSaving(false);setError("Enter the name of the player, guardian or authorised representative confirming consent.");return;}
     if(isNew&&player.authority_type==="parent_or_guardian"&&(!player.guardian_name.trim()||!player.guardian_contact.trim())){setSaving(false);setError("Guardian name and contact are required for a minor.");return;}
     if(isNew){
-      const duplicate=await supabase.from("players").select("id").eq("team_id",player.team_id).ilike("full_name",fullName).limit(1);
-      if(duplicate.error){setSaving(false);setError("Could not validate the player record: "+duplicate.error.message);return;}
-      if(duplicate.data?.length){setSaving(false);setError("A player with this name is already registered for this team. Check the roster before continuing.");return;}
+      const similar=await supabase.from("players").select("id,photo_url,shirt_number,date_of_birth").eq("team_id",player.team_id).ilike("full_name",fullName).limit(5);
+      if(similar.error){setSaving(false);setError("Could not check for similar player records: "+similar.error.message);return;}
+      if(similar.data?.length)setNotice("A player with this name already exists in this team. Registration is allowed; verify the photo and player details identify the correct person.");
     }
     const values={team_id:player.team_id,full_name:fullName,shirt_number:player.shirt_number?Number(player.shirt_number):null,position:player.position.trim()||null,date_of_birth:player.date_of_birth||null,nationality:player.nationality.trim()||null,height_cm:player.height_cm?Number(player.height_cm):null,preferred_foot:player.preferred_foot||null,market_transfer_value:player.market_transfer_value.trim()||null};
     const result=isNew?await supabase.from("players").insert(values).select("*").single():await supabase.from("players").update(values).eq("id",editingPlayerId).select("*").single();
-    if(result.error){setSaving(false);setError(result.error.code==="23505"?"This player conflicts with an existing registration. Check the team roster.":"Player could not be saved: "+result.error.message);return;}
+    if(result.error){setSaving(false);setError(result.error.code==="23505"?"This player record conflicts with another unique field. Check the entered details.":"Player could not be saved: "+result.error.message);return;}
     const playerId=result.data.id;
     let uploadedPhotoUrl=null;
     try{
