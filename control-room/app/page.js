@@ -508,7 +508,7 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
       rosterTeamId=values.to_team_id;
     }
     if(rosterTeamId){
-      const roster=await supabase.from("players").update({team_id:rosterTeamId,updated_at:new Date().toISOString()}).eq("id",values.player_id);
+      const roster=await supabase.from("players").update({team_id:rosterTeamId,is_active:true,updated_at:new Date().toISOString()}).eq("id",values.player_id);
       if(roster.error){setSaving(false);setError("Movement was recorded, but the player's current team could not be updated: "+roster.error.message);return;}
     }
     setSaving(false);setEditingMovementId("");setMovementForm({player_id:"",movement_type:"transfer",from_team_id:"",to_team_id:"",start_date:"",end_date:"",status:"completed",notes:""});setNotice(values.movement_type==="loan"?(values.status==="completed"?"Loan expired/ended — player returned to mother team.":"Loan recorded — player is now registered with the loan team until the return date."):"Transfer recorded and player team updated.");await refresh();
