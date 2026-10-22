@@ -1207,7 +1207,7 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
           <label>Confirmed reschedule / restart time <span className="muted">(optional)</span><input type="datetime-local" disabled={saving||r.status==="verified"} value={choice.reschedule_at?new Date(choice.reschedule_at).toISOString().slice(0,16):(r.reschedule_at?new Date(r.reschedule_at).toISOString().slice(0,16):"")} onChange={e=>setReviewChoices({...reviewChoices,[r.id]:{...choice,reschedule_at:e.target.value?new Date(e.target.value).toISOString():null}})}/></label>
           <p className="muted">The administrator's reason is stored with the official match outcome. Rescheduling is optional.</p>
         </div>}
-        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="button" onClick={()=>setReport(r)}>Open</button><button className="button primary" disabled={saving||r.status==="verified"} onClick={()=>verifyReport(r)}>Verify & Lock</button><button className="button" disabled={saving||r.status==="rejected"} onClick={()=>rejectReport(r)}>Reject / Return</button></div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="button" onClick={()=>setReport(r)}>Open</button><button className="button primary" disabled={saving||r.status!=="submitted"} onClick={()=>verifyReport(r)}>Verify & Lock</button><button className="button" disabled={saving||r.status==="rejected"} onClick={()=>rejectReport(r)}>Reject / Return</button></div>
       </div>;
     })}{!reports.length&&<p className="muted">No reports in the queue.</p>}</div>
   </div></div>}
