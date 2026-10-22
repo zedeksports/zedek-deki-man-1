@@ -84,7 +84,7 @@ BEGIN
      OR v_report.reporter_id IS DISTINCT FROM v_initial_report.reporter_id THEN
     RAISE EXCEPTION 'Report ownership changed during verification; reload and retry';
   END IF;
-  IF v_report.status <> 'submitted' THEN
+  IF v_report.status IS DISTINCT FROM 'submitted' THEN
     RAISE EXCEPTION 'Only a submitted report can be verified; current status: %', v_report.status;
   END IF;
 
