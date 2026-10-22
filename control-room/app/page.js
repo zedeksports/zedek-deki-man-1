@@ -728,29 +728,21 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
   }
   async function lockReport(r,outcome,rescheduleAt,interruptionReason,interruptionMinute){
     const supabase=getSupabase();setSaving(true);setError("");setNotice("");
-    const {data:{user}}=await supabase.auth.getUser();
     const interrupted=["suspended","postponed","abandoned","cancelled"].includes(outcome);
     if(!["completed","suspended","postponed","abandoned","cancelled"].includes(outcome)){setError("Select a valid official outcome.");setSaving(false);return;}
     if(interrupted&&!interruptionReason){setError("A reason is required before locking an interrupted match.");setSaving(false);return;}
     if(interruptionMinute!==null&&(!Number.isInteger(interruptionMinute)||interruptionMinute<0)){setError("Interruption minute must be a whole number of 0 or greater.");setSaving(false);return;}
-    const now=new Date().toISOString();
-    const officialResult=outcome==="completed";
-    const targetStatus=officialResult?"verified":outcome;
-    const v=await supabase.from("match_verifications").upsert({match_id:r.match_id,verified_by:user?.id||null,verified_at:now,official_result:officialResult,locked_at:now,notes:interruptionReason||null},{onConflict:"match_id"});
-    if(v.error){setError(v.error.message);setSaving(false);return;}
-    const m=await supabase.from("matches").update({status:targetStatus,rescheduled_at:rescheduleAt||null,interruption_reason:interruptionReason||null,interruption_minute:interruptionMinute,outcome_note:r.summary||null}).eq("id",r.match_id);
-    if(m.error){setError(m.error.message);setSaving(false);return;}
-    if(officialResult){
-      const seasonResult=await supabase.from("matches").select("season_id").eq("id",r.match_id).maybeSingle();
-      if(seasonResult.error){setError("Official result saved, but statistics rebuild could not resolve the season: "+seasonResult.error.message);setSaving(false);return;}
-      if(seasonResult.data?.season_id){
-        const statsResult=await supabase.rpc("rebuild_official_player_statistics",{p_season_id:seasonResult.data.season_id});
-        if(statsResult.error){setError("Official result saved, but player statistics rebuild failed: "+statsResult.error.message);setSaving(false);return;}
-      }
-    }
-    const rr=await supabase.from("match_reports").update({status:"verified",outcome,interruption_reason:interruptionReason||null,interruption_minute:interruptionMinute,reschedule_at:rescheduleAt||null,updated_at:now}).eq("id",r.id);
-    if(rr.error){setError(rr.error.message);setSaving(false);return;}
-    setSaving(false);setNotice(outcome==="completed"?"Official result verified and locked.":("Match locked as "+outcome+"."+(rescheduleAt?" Reschedule/restart time recorded.":" No reschedule time is required or recorded.")));await loadReports();await refresh();
+    const result=await supabase.rpc("verify_match_report_atomic",{
+      p_report_id:r.id,
+      p_outcome:outcome,
+      p_reschedule_at:interrupted?(rescheduleAt||null):null,
+      p_interruption_reason:interrupted?(interruptionReason||null):null,
+      p_interruption_minute:interrupted?interruptionMinute:null
+    });
+    if(result.error){setError("Report verification failed without committing partial changes: "+result.error.message);setSaving(false);return;}
+    setSaving(false);
+    setNotice(outcome==="completed"?"Official result verified, locked, and statistics rebuilt.":("Match locked as "+outcome+"."+(rescheduleAt?" Reschedule/restart time recorded.":" No reschedule time is recorded.")));
+    await loadReports();await refresh();
   }
   async function rejectReport(r){
     const supabase=getSupabase();setSaving(true);setError("");setNotice("");
