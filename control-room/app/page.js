@@ -137,7 +137,7 @@ export default function ControlRoomPage(){
   const [officialForm,setOfficialForm]=useState({team_id:"",user_id:"",role:"Team Official",start_date:"",end_date:""}); const [editingTeamId,setEditingTeamId]=useState(""); const [editingPlayerId,setEditingPlayerId]=useState("");
   const [consents,setConsents]=useState([]),[privacyRequests,setPrivacyRequests]=useState([]);
   const [publicOfficialProfiles,setPublicOfficialProfiles]=useState([]),[publicOfficialForm,setPublicOfficialForm]=useState({id:"",team_official_id:null,team_id:"",full_name:"",phone:"",date_of_birth:"",nationality:"",role:"Team Official",is_current:true,image:null,existing_photo_url:"",consent_confirmed:false,authority_type:"self",holder_name:"",guardian_name:"",guardian_contact:""}),[userSettingsRows,setUserSettingsRows]=useState([]),[notificationPreferenceRows,setNotificationPreferenceRows]=useState([]);
-  const [saving,setSaving]=useState(false),[statsCompetitionId,setStatsCompetitionId]=useState(""),[statsSeasonId,setStatsSeasonId]=useState(""),[officialStats,setOfficialStats]=useState([]),[statsData,setStatsData]=useState({standings:[],scorers:[],recent:[],form:[]}),[h2hHome,setH2hHome]=useState(""),[h2hAway,setH2hAway]=useState(""),[h2hData,setH2hData]=useState([]),[h2hSummary,setH2hSummary]=useState(null), [reportMatch,setReportMatch]=useState(null), [report,setReport]=useState(null), [reports,setReports]=useState([]),[liveMatch,setLiveMatch]=useState(null),[events,setEvents]=useState([]),[matchStats,setMatchStats]=useState(null),[clock,setClock]=useState(0),[eventForm,setEventForm]=useState({type:"goal",team_id:"",player_id:"",secondary_player_id:"",coach_id:"",actor_type:"player",minute:"",extra_minute:"",rating:"7.0",details:""}),[lineupMatch,setLineupMatch]=useState(null),[lineupTeam,setLineupTeam]=useState(""),[lineup,setLineup]=useState(null),[lineupPlayers,setLineupPlayers]=useState([]),[lineupLoading,setLineupLoading]=useState(false),[liveLineupPlayers,setLiveLineupPlayers]=useState([]);
+  const [saving,setSaving]=useState(false),[statsCompetitionId,setStatsCompetitionId]=useState(""),[statsSeasonId,setStatsSeasonId]=useState(""),[officialStats,setOfficialStats]=useState([]),[statsData,setStatsData]=useState({standings:[],scorers:[],recent:[],form:[]}),[h2hHome,setH2hHome]=useState(""),[h2hAway,setH2hAway]=useState(""),[h2hData,setH2hData]=useState([]),[h2hSummary,setH2hSummary]=useState(null), [reportMatch,setReportMatch]=useState(null), [report,setReport]=useState(null), [reports,setReports]=useState([]),[motmMatch,setMotmMatch]=useState(null),[motmCandidates,setMotmCandidates]=useState([]),[motmPlayerId,setMotmPlayerId]=useState(""),[motmLoading,setMotmLoading]=useState(false),[liveMatch,setLiveMatch]=useState(null),[events,setEvents]=useState([]),[matchStats,setMatchStats]=useState(null),[clock,setClock]=useState(0),[eventForm,setEventForm]=useState({type:"goal",team_id:"",player_id:"",secondary_player_id:"",coach_id:"",actor_type:"player",minute:"",extra_minute:"",rating:"7.0",details:""}),[lineupMatch,setLineupMatch]=useState(null),[lineupTeam,setLineupTeam]=useState(""),[lineup,setLineup]=useState(null),[lineupPlayers,setLineupPlayers]=useState([]),[lineupLoading,setLineupLoading]=useState(false),[liveLineupPlayers,setLiveLineupPlayers]=useState([]);
   const [contentPosts,setContentPosts]=useState([]),[editingContentId,setEditingContentId]=useState(""),[contentCoverImage,setContentCoverImage]=useState(null);
   const [contentForm,setContentForm]=useState({content_type:"news",title:"",slug:"",excerpt:"",body:"",category:"",status:"draft",featured:false,cover_image_url:""});
   const [surveys,setSurveys]=useState([]),[surveyQuestions,setSurveyQuestions]=useState([]),[surveyResponses,setSurveyResponses]=useState([]);
@@ -730,6 +730,52 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
     if(r.error){setError("Could not load reporting match cards: "+r.error.message);return;}
     setReports(r.data||[]);
   }
+  async function loadMotmCandidates(match){
+    setMotmMatch(match||null);setMotmCandidates([]);setMotmPlayerId("");
+    if(!match)return;
+    if(match.status!=="verified"){setError("Man of the Match can only be selected after the match has been successfully verified.");return;}
+    setMotmLoading(true);setError("");setNotice("");
+    const supabase=getSupabase();
+    const verification=await supabase.from("match_verifications").select("official_result,locked_at").eq("match_id",match.id).maybeSingle();
+    if(verification.error){setMotmLoading(false);setError("Could not confirm the official verification: "+verification.error.message);return;}
+    if(!verification.data?.official_result||!verification.data?.locked_at){setMotmLoading(false);setError("This match is not fully verified and locked as an official result yet.");return;}
+    const lineups=await supabase.from("match_lineups").select("team_id, match_lineup_players(player_id,role,player:players!match_lineup_players_player_id_fkey(id,full_name,shirt_number,photo_url,team_id))").eq("match_id",match.id);
+    if(lineups.error){setMotmLoading(false);setError("Could not load the confirmed match lineups: "+lineups.error.message);return;}
+    const candidateMap=new Map();
+    (lineups.data||[]).forEach(lineup=>{
+      if(![match.home_team_id,match.away_team_id].includes(lineup.team_id))return;
+      (lineup.match_lineup_players||[]).forEach(row=>{
+        const player=row.player;
+        if(!player||player.team_id!==lineup.team_id)return;
+        candidateMap.set(player.id,{...player,team_id:lineup.team_id,lineup_role:row.role,team_name:lineup.team_id===match.home_team_id?(match.home?.name||"Home"):(match.away?.name||"Away")});
+      });
+    });
+    const candidates=[...candidateMap.values()].sort((a,b)=>a.team_name.localeCompare(b.team_name)||a.full_name.localeCompare(b.full_name));
+    setMotmCandidates(candidates);setMotmPlayerId(match.man_of_the_match_player_id||"");setMotmLoading(false);
+    if(!candidates.length)setError("No players were found in the confirmed lineups for this match. Confirm both team lineups before selecting MOTM.");
+  }
+  async function saveManOfTheMatch(){
+    if(!motmMatch){setError("Select a verified match first.");return;}
+    if(!motmPlayerId||!motmCandidates.some(p=>p.id===motmPlayerId)){setError("Choose a player from this match's confirmed lineups.");return;}
+    setSaving(true);setError("");setNotice("");
+    const supabase=getSupabase();
+    const current=await supabase.from("matches").select("id,status,home_team_id,away_team_id").eq("id",motmMatch.id).maybeSingle();
+    if(current.error||!current.data){setSaving(false);setError("Could not re-check the selected match: "+(current.error?.message||"Match not found."));return;}
+    if(current.data.status!=="verified"){setSaving(false);setError("MOTM cannot be saved because this match is no longer verified.");return;}
+    const verification=await supabase.from("match_verifications").select("official_result,locked_at").eq("match_id",motmMatch.id).maybeSingle();
+    if(verification.error||!verification.data?.official_result||!verification.data?.locked_at){setSaving(false);setError("MOTM can only be saved after the official result is verified and locked."+(verification.error?" "+verification.error.message:""));return;}
+    const chosen=motmCandidates.find(p=>p.id===motmPlayerId);
+    if(!chosen||![current.data.home_team_id,current.data.away_team_id].includes(chosen.team_id)){setSaving(false);setError("The selected player is not part of either team in this match.");return;}
+    const lineupCheck=await supabase.from("match_lineup_players").select("player_id,match_lineups!inner(match_id,team_id)").eq("player_id",motmPlayerId).eq("match_lineups.match_id",motmMatch.id);
+    if(lineupCheck.error||!lineupCheck.data?.some(row=>[current.data.home_team_id,current.data.away_team_id].includes(row.match_lineups?.team_id))){setSaving(false);setError("The selected player must be in this match's confirmed lineup.");return;}
+    const saved=await supabase.from("matches").update({man_of_the_match_player_id:motmPlayerId,updated_at:new Date().toISOString()}).eq("id",motmMatch.id).eq("status","verified").select("id,man_of_the_match_player_id").single();
+    setSaving(false);
+    if(saved.error){setError("Man of the Match could not be saved: "+saved.error.message);return;}
+    setMatches(rows=>rows.map(m=>m.id===motmMatch.id?{...m,man_of_the_match_player_id:motmPlayerId}:m));
+    setMotmMatch(prev=>prev?{...prev,man_of_the_match_player_id:motmPlayerId}:prev);
+    setNotice("Man of the Match saved: "+chosen.full_name+" · "+chosen.team_name+".");
+    await refresh();
+  }
   async function saveReport(){
     if(!reportMatch)return;
     const supabase=getSupabase(); setSaving(true);setError("");setNotice("");
@@ -1237,7 +1283,29 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
         <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="button" onClick={()=>setReport(r)}>Open</button><button className="button primary" disabled={saving||r.status==="verified"} onClick={()=>verifyReport(r)}>Verify & Lock</button><button className="button" disabled={saving||r.status==="rejected"} onClick={()=>rejectReport(r)}>Reject / Return</button></div>
       </div>;
     })}{!reports.length&&<p className="muted">No reports in the queue.</p>}</div>
-  </div></div>}
+  </div>
+  <div className="panel">
+    <h2>Man of the Match</h2>
+    <p className="muted">Choose one player from the confirmed match lineups after the official result has been verified and locked. You can update the selection later.</p>
+    <label>Verified match<select value={motmMatch?.id||""} disabled={saving||motmLoading} onChange={e=>{const match=matches.find(x=>x.id===e.target.value)||null;loadMotmCandidates(match);}}>
+      <option value="">Select successfully verified match</option>
+      {matches.filter(x=>x.status==="verified").map(x=><option key={x.id} value={x.id}>{x.home?.name||"Home"} {x.home_score??0} — {x.away_score??0} {x.away?.name||"Away"} · {fmtDate(x.scheduled_at)}</option>)}
+    </select></label>
+    {motmMatch&&<div className="form-stack" style={{marginTop:12}}>
+      <div className="status-card"><b>{motmMatch.home?.name||"Home"} {motmMatch.home_score??0} — {motmMatch.away_score??0} {motmMatch.away?.name||"Away"}</b><span>Official result verified · {fmtDate(motmMatch.scheduled_at)}</span></div>
+      {motmLoading?<p className="muted">Loading confirmed lineups…</p>:<label>Man of the Match<select value={motmPlayerId} disabled={saving||!motmCandidates.length} onChange={e=>setMotmPlayerId(e.target.value)}>
+        <option value="">Choose MOTM</option>
+        {motmCandidates.map(p=><option key={p.id} value={p.id}>{p.team_name} · #{p.shirt_number??"—"} · {p.full_name}{p.lineup_role?" · "+p.lineup_role:""}</option>)}
+      </select></label>}
+      {motmPlayerId&&motmCandidates.find(p=>p.id===motmPlayerId)&&<div className="status-card" style={{display:"flex",alignItems:"center",gap:12}}>
+        {motmCandidates.find(p=>p.id===motmPlayerId).photo_url?<img src={motmCandidates.find(p=>p.id===motmPlayerId).photo_url} alt="" style={{width:52,height:52,borderRadius:"50%",objectFit:"cover"}}/>:null}
+        <div><b>⭐ {motmCandidates.find(p=>p.id===motmPlayerId).full_name}</b><span>{motmCandidates.find(p=>p.id===motmPlayerId).team_name} · Man of the Match</span></div>
+      </div>}
+      {!motmLoading&&!motmCandidates.length&&<p className="muted">No confirmed lineup players available for selection.</p>}
+      <button className="button primary" disabled={saving||motmLoading||!motmMatch||!motmPlayerId||!motmCandidates.length} onClick={saveManOfTheMatch}>{saving?"Saving…":motmMatch.man_of_the_match_player_id?"Update Man of the Match":"Save Man of the Match"}</button>
+    </div>}
+  </div>
+  </div>}
 {tab==="publishing"&&(
   <div className="form-stack">
     <div className="stats-grid">
