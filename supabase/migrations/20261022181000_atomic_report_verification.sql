@@ -16,7 +16,9 @@ AS $function$
 DECLARE
   v_uid uuid := auth.uid();
   v_report public.match_reports%ROWTYPE;
+  v_initial_report public.match_reports%ROWTYPE;
   v_match public.matches%ROWTYPE;
+  v_assignment_status text;
   v_now timestamptz := clock_timestamp();
   v_interrupted boolean;
   v_target_status text;
@@ -47,16 +49,43 @@ BEGIN
     RAISE EXCEPTION 'Interruption minute must be zero or greater';
   END IF;
 
+  -- Discover the match first, then take the same per-match advisory lock
+  -- used by submit_match_report. This serialises submission and verification.
+  SELECT mr.* INTO v_initial_report
+  FROM public.match_reports mr
+  WHERE mr.id = p_report_id;
+
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Match report not found';
+  END IF;
+
+  PERFORM pg_advisory_xact_lock(hashtextextended(v_initial_report.match_id::text, 0));
+
+  -- Match submission's lock order: assignment first, report second.
+  IF v_initial_report.reporter_id IS NOT NULL THEN
+    SELECT ra.status INTO v_assignment_status
+    FROM public.reporter_assignments ra
+    WHERE ra.match_id = v_initial_report.match_id
+      AND ra.reporter_id = v_initial_report.reporter_id
+    FOR UPDATE;
+    -- A missing legacy assignment is tolerated; the report itself remains
+    -- eligible for verification if it was submitted by an authorised route.
+  END IF;
+
   SELECT mr.* INTO v_report
   FROM public.match_reports mr
   WHERE mr.id = p_report_id
   FOR UPDATE;
 
   IF NOT FOUND THEN
-    RAISE EXCEPTION 'Match report not found';
+    RAISE EXCEPTION 'Match report disappeared before verification';
   END IF;
-  IF v_report.status = 'verified' THEN
-    RAISE EXCEPTION 'This report has already been verified and locked';
+  IF v_report.match_id IS DISTINCT FROM v_initial_report.match_id
+     OR v_report.reporter_id IS DISTINCT FROM v_initial_report.reporter_id THEN
+    RAISE EXCEPTION 'Report ownership changed during verification; reload and retry';
+  END IF;
+  IF v_report.status <> 'submitted' THEN
+    RAISE EXCEPTION 'Only a submitted report can be verified; current status: %', v_report.status;
   END IF;
 
   SELECT m.* INTO v_match
