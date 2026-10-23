@@ -47,14 +47,14 @@ export default function ReporterPage(){
   [...events].sort((a,b)=>new Date(a.created_at)-new Date(b.created_at)).filter(x=>x.event_type==="substitution").forEach(x=>{
     const out=byId.get(x.player_id),inc=byId.get(x.secondary_player_id);
     if(out)out.onField=false;
-    if(inc)inc.onField=true;
+    if(inc){inc.onField=true;inc.usedAsSubstitute=true;}
   });
   return byId;
  },[lineupPlayers,events]);
  const outgoingPlayers=useMemo(()=>eventPlayers.filter(p=>substitutionState.get(p.id)?.onField),[eventPlayers,substitutionState]);
  const redCardIds=useMemo(()=>new Set(events.filter(x=>x.event_type==="red_card"&&x.player_id).map(x=>x.player_id)),[events]);
  const activeEventPlayers=useMemo(()=>eventPlayers.filter(p=>substitutionState.get(p.id)?.onField&&!redCardIds.has(p.id)),[eventPlayers,substitutionState,redCardIds]);
- const incomingPlayers=useMemo(()=>eventPlayers.filter(p=>substitutionState.get(p.id)?.role==="substitute"&&!substitutionState.get(p.id)?.onField&&!redCardIds.has(p.id)),[eventPlayers,substitutionState,redCardIds]);
+ const incomingPlayers=useMemo(()=>eventPlayers.filter(p=>substitutionState.get(p.id)?.role==="substitute"&&!substitutionState.get(p.id)?.onField&&!substitutionState.get(p.id)?.usedAsSubstitute&&!redCardIds.has(p.id)),[eventPlayers,substitutionState,redCardIds]);
  const redCoachIds=useMemo(()=>new Set(events.filter(x=>x.event_type==="red_card"&&x.coach_id).map(x=>x.coach_id)),[events]);
  const eventCoaches=useMemo(()=>coaches.filter(c=>c.is_active&&!redCoachIds.has(c.id)&&Array.isArray(c.team_coaches)&&c.team_coaches.some(tc=>tc.team_id===event.team_id&&tc.is_current)),[coaches,redCoachIds,event.team_id]);
  async function refresh(){const s=sb();const me=await s.auth.getUser();if(me.error||!me.data.user){location.href="/login";return;}setUser(me.data.user);const p=await s.from("profiles").select("id,full_name,role,is_active").eq("id",me.data.user.id).maybeSingle();if(p.error){setError(p.error.message);return;}setProfile(p.data);if(p.data?.role!=="reporter"||!p.data.is_active)return;const a=await s.from("reporter_assignments").select("*").eq("reporter_id",me.data.user.id).order("created_at",{ascending:false});if(a.error){setError(a.error.message);return;}const ids=(a.data||[]).map(x=>x.match_id);const [m,pl,co]=await Promise.all([ids.length?s.from("matches").select("*,home:teams!matches_home_team_id_fkey(name),away:teams!matches_away_team_id_fkey(name),seasons(name),stages(name)").in("id",ids):{data:[],error:null},s.from("players").select("id,team_id,full_name,shirt_number,position,photo_url"),s.from("coaches").select("id,full_name,role,is_active,team_coaches(team_id,is_current)")]);const bad=[m,pl,co].find(x=>x.error);if(bad){setError(bad.error.message);return;}setAssignments(a.data||[]);setMatches(m.data||[]);setPlayers(pl.data||[]);setCoaches(co.data||[]);if(a.data?.length&&!selectedId)setSelectedId(a.data[0].match_id);}
