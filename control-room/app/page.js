@@ -589,7 +589,7 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
     const activeIds=new Set(normalized.filter(x=>x.role==="starter"&&x.slot).map(x=>x.player_id));
     events.filter(x=>x.team_id===teamId&&x.event_type==="substitution").slice().sort((a,b)=>new Date(a.created_at)-new Date(b.created_at)).forEach(x=>{
       if(x.player_id)activeIds.delete(x.player_id);
-      if(x.secondary_player_id&&substituteIds.has(x.secondary_player_id))activeIds.add(x.secondary_player_id);
+      if(x.secondary_player_id&&substituteIds.has(x.secondary_player_id)){activeIds.add(x.secondary_player_id);substituteIds.delete(x.secondary_player_id);}
     });
     redIds.forEach(id=>activeIds.delete(id));
     if(mode==="active")return activeIds;
