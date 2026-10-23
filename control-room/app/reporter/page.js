@@ -24,7 +24,28 @@ const FORMATION_STARTER_SLOTS={
  "4-3-1-2":["GK","RB","CB","CB","LB","CM","CM","CM","AM","ST","ST"],
  "4-2-2-2":["GK","RB","CB","CB","LB","DM","DM","AM","AM","ST","ST"]
 };
-const canonicalPosition=value=>String(value||"").trim().toUpperCase().replace(/\s+/g," ");
+const POSITION_ALIASES={
+ GK:["GK","GOALKEEPER","KEEPER"],
+ RB:["RB","RIGHT BACK","RIGHT-BACK"],
+ LB:["LB","LEFT BACK","LEFT-BACK"],
+ CB:["CB","CENTRE BACK","CENTER BACK","CENTRE-BACK","CENTER-BACK","DEFENDER","DEF"],
+ RWB:["RWB","RIGHT WING-BACK","RIGHT WING BACK"],
+ LWB:["LWB","LEFT WING-BACK","LEFT WING BACK"],
+ DM:["DM","DEFENSIVE MIDFIELDER","DEFENSIVE MID"],
+ CM:["CM","CENTRAL MIDFIELDER","CENTRAL MID","MIDFIELDER","MID"],
+ AM:["AM","ATTACKING MIDFIELDER","ATTACKING MID"],
+ RM:["RM","RIGHT MIDFIELDER","RIGHT MID","RIGHT WINGER","RW"],
+ LM:["LM","LEFT MIDFIELDER","LEFT MID","LEFT WINGER","LW"],
+ RW:["RW","RIGHT WINGER","RIGHT WING"],
+ LW:["LW","LEFT WINGER","LEFT WING"],
+ ST:["ST","STRIKER","CENTRE FORWARD","CENTER FORWARD","CF","FW","FORWARD"]
+};
+function canonicalPosition(value){
+ const v=String(value||"").trim().toUpperCase().replace(/\s+/g," ");
+ if(!v)return "";
+ for(const [key,aliases] of Object.entries(POSITION_ALIASES))if(aliases.includes(v))return key;
+ return v;
+}
 function resolveFormationStarters(rows,formation){
  const slots=FORMATION_STARTER_SLOTS[formation]||[];
  const starters=(rows||[]).filter(x=>x.role==="starter");
