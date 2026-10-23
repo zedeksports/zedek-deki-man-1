@@ -47,7 +47,7 @@ export default function ReporterPage(){
   [...events].sort((a,b)=>new Date(a.created_at)-new Date(b.created_at)).filter(x=>x.event_type==="substitution").forEach(x=>{
     const out=byId.get(x.player_id),inc=byId.get(x.secondary_player_id);
     if(out)out.onField=false;
-    if(inc){inc.onField=true;inc.usedAsSubstitute=true;}
+    if(inc&&inc.role==="substitute"&&!inc.usedAsSubstitute){inc.onField=true;inc.usedAsSubstitute=true;}
   });
   return byId;
  },[lineupPlayers,events]);
