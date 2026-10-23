@@ -35,8 +35,8 @@ const POSITION_ALIASES={
   DM:["DM","DEFENSIVE MIDFIELDER","DEFENSIVE MID"],
   CM:["CM","CENTRAL MIDFIELDER","CENTRAL MID","MIDFIELDER","MID"],
   AM:["AM","ATTACKING MIDFIELDER","ATTACKING MID"],
-  RM:["RM","RIGHT MIDFIELDER","RIGHT MID","RIGHT WINGER","RW"],
-  LM:["LM","LEFT MIDFIELDER","LEFT MID","LEFT WINGER","LW"],
+  RM:["RM","RIGHT MIDFIELDER","RIGHT MID","RIGHT WINGER"],
+  LM:["LM","LEFT MIDFIELDER","LEFT MID","LEFT WINGER"],
   RW:["RW","RIGHT WINGER","RIGHT WING"],
   LW:["LW","LEFT WINGER","LEFT WING"],
   ST:["ST","STRIKER","CENTRE FORWARD","CENTER FORWARD","CF","FW","FORWARD"]
@@ -84,8 +84,9 @@ function normalizeLineupRows(rows,formation){
     const row=exact||fallback;
     if(row){used.add(row.player_id);starters.push({...row,role:"starter",position:slot.position,slot:slot.id});}
   });
-  input.filter(x=>x.role==="starter"&&!used.has(x.player_id)).forEach(x=>{used.add(x.player_id);starters.push({...x,role:"starter",slot:null});});
-  const substitutes=input.filter(x=>x.role==="substitute").map(x=>({...x,role:"substitute",slot:null}));
+  // Legacy starters that do not fit one of the formation's 11 slots become substitutes.
+  const overflowStarters=input.filter(x=>x.role==="starter"&&!used.has(x.player_id)).map(x=>({...x,role:"substitute",slot:null}));
+  const substitutes=[...input.filter(x=>x.role==="substitute"),...overflowStarters].map(x=>({...x,role:"substitute",slot:null}));
   return [...starters,...substitutes];
 }
 
@@ -555,11 +556,11 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
     const [ev,st,lu]=await Promise.all([
       supabase.from("match_events").select("*, teams(name), player:players!match_events_player_id_fkey(full_name,shirt_number,photo_url), secondary_player:players!match_events_secondary_player_id_fkey(full_name,shirt_number,photo_url)").eq("match_id",id).order("created_at",{ascending:false}),
       supabase.from("match_statistics").select("*").eq("match_id",id).maybeSingle(),
-      supabase.from("match_lineups").select("id,team_id,match_lineup_players(player_id,role,shirt_number,position,player:players!match_lineup_players_player_id_fkey(id,team_id,full_name,shirt_number,is_active))").eq("match_id",id)
+      supabase.from("match_lineups").select("id,team_id,formation,match_lineup_players(player_id,role,shirt_number,position,player:players!match_lineup_players_player_id_fkey(id,team_id,full_name,shirt_number,is_active))").eq("match_id",id)
     ]);
     if(ev.error)setError(ev.error.message); else setEvents(ev.data||[]);
     if(st.error)setError(st.error.message); else setMatchStats(st.data||null);
-    if(lu.error)setError(lu.error.message); else setLiveLineupPlayers((lu.data||[]).flatMap(x=>(x.match_lineup_players||[]).map(p=>({...p,team_id:x.team_id,player:p.player||null}))));
+    if(lu.error)setError(lu.error.message); else setLiveLineupPlayers((lu.data||[]).flatMap(x=>(x.match_lineup_players||[]).map(p=>({...p,team_id:x.team_id,formation:x.formation,player:p.player||null}))));
   }
   function elapsed(m){ if(!m)return 0; const now=Date.now(); const kickoff=m.kickoff_at?new Date(m.kickoff_at).getTime():0; if(!kickoff)return 0; const halftime=m.halftime_at?new Date(m.halftime_at).getTime():0; const secondHalf=m.second_half_at?new Date(m.second_half_at).getTime():0; const finished=m.finished_at?new Date(m.finished_at).getTime():0; if(m.status==="scheduled")return 0; if(m.status==="live"){ if(secondHalf){ const firstHalfEnd=halftime||secondHalf; const first=45*60*1000; const second=Math.max(0,now-secondHalf); return Math.floor((first+second)/1000); } return Math.floor(Math.max(0,now-kickoff)/1000); } if(m.status==="halftime"){ const end=halftime||now; return Math.floor(Math.max(0,end-kickoff)/1000); } if(m.status==="finished"){ if(secondHalf){ const firstHalfEnd=halftime||secondHalf; const first=Math.max(0,firstHalfEnd-kickoff); const second=Math.max(0,(finished||now)-secondHalf); return Math.floor((first+second)/1000); } return Math.floor(Math.max(0,(finished||now)-kickoff)/1000); } return 0; }
   function ratingTone(value){const n=Number(value);if(n<6)return {background:"#fee2e2",color:"#991b1b",border:"1px solid #fca5a5"};if(n<7)return {background:"#ffedd5",color:"#9a3412",border:"1px solid #fdba74"};if(n<8)return {background:"#fef3c7",color:"#92400e",border:"1px solid #fcd34d"};if(n<9)return {background:"#dcfce7",color:"#166534",border:"1px solid #86efac"};return {background:"#dbeafe",color:"#1e40af",border:"1px solid #93c5fd"};}
@@ -581,13 +582,18 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
 }
   function liveEventPlayerIds(teamId,mode="active"){
     const rows=liveLineupPlayers.filter(x=>x.team_id===teamId);
+    const formation=rows.find(x=>x.formation)?.formation;
+    const normalized=normalizeLineupRows(rows,formation);
     const redIds=new Set(events.filter(x=>x.team_id===teamId&&x.event_type==="red_card"&&x.player_id).map(x=>x.player_id));
-    const enteredIds=new Set(events.filter(x=>x.team_id===teamId&&x.event_type==="substitution"&&x.secondary_player_id).map(x=>x.secondary_player_id));
-    const activeIds=new Set(rows.filter(x=>x.role==="starter").map(x=>x.player_id));
-    enteredIds.forEach(id=>activeIds.add(id));
+    const substituteIds=new Set(normalized.filter(x=>x.role==="substitute").map(x=>x.player_id));
+    const activeIds=new Set(normalized.filter(x=>x.role==="starter"&&x.slot).map(x=>x.player_id));
+    events.filter(x=>x.team_id===teamId&&x.event_type==="substitution").slice().sort((a,b)=>new Date(a.created_at)-new Date(b.created_at)).forEach(x=>{
+      if(x.player_id)activeIds.delete(x.player_id);
+      if(x.secondary_player_id&&substituteIds.has(x.secondary_player_id)){activeIds.add(x.secondary_player_id);substituteIds.delete(x.secondary_player_id);}
+    });
     redIds.forEach(id=>activeIds.delete(id));
     if(mode==="active")return activeIds;
-    if(mode==="bench")return new Set(rows.filter(x=>x.role==="substitute"&&!activeIds.has(x.player_id)&&!redIds.has(x.player_id)).map(x=>x.player_id));
+    if(mode==="bench")return new Set([...substituteIds].filter(id=>!activeIds.has(id)&&!redIds.has(id)));
     if(mode==="all")return new Set(rows.map(x=>x.player_id));
     return new Set([...activeIds,...redIds]);
   }
@@ -856,9 +862,9 @@ async function deleteCoach(x){if(!window.confirm("Remove "+x.full_name+" from th
     if(!lineupEligible(lineupMatch)){setError("Lineups can only be saved for an eligible scheduled fixture within 30 minutes of kickoff.");return;}
     const selected=lineupPlayers;
     const slots=lineupSlotIds(lineup?.formation);
-    const starters=selected.filter(x=>x.role==="starter"&&x.slot);
+    const starters=selected.filter(x=>x.role==="starter");
     if(slots.length!==11){setError("Select one of the supported formations before submitting the starting XI.");return;}
-    if(starters.length!==11||slots.some(slot=>!starters.some(x=>x.slot===slot.id))){setError("Select one player for every starting position: GK, defenders, midfielders and forwards must all be filled.");return;}
+    if(starters.length!==11||starters.some(x=>!x.slot)||slots.some(slot=>!starters.some(x=>x.slot===slot.id))){setError("A starting XI must contain exactly 11 players, with one player assigned to every starting position. Move any extra players to substitutes.");return;}
     const starterIds=starters.map(x=>x.player_id);
     if(new Set(starterIds).size!==starterIds.length){setError("A player cannot occupy more than one starting position.");return;}
     const captain=selected.find(x=>x.player_id===lineup?.captain_player_id)?.player_id||lineup?.captain_player_id;

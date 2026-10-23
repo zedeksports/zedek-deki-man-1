@@ -10,6 +10,54 @@ const eventSymbol=(type)=>({goal:"⚽",penalty_scored:"⚽ PK",penalty_goal:"⚽
 const eventLabel=(type)=>({goal:"Goal",penalty_scored:"Penalty scored",penalty_goal:"Penalty scored",own_goal:"Own goal",penalty_missed:"Penalty missed",yellow_card:"Yellow card",red_card:"Red card",substitution:"Substitution",assist:"Assist",injury:"Injury",player_rating:"Player rating",var:"VAR",note:"Match note"}[type]||String(type||"Event").replaceAll("_"," "));
 
 const statRows=[["home_possession","away_possession","Possession %",.1],["home_shots","away_shots","Shots",1],["home_shots_on_target","away_shots_on_target","Shots on target",1],["home_corners","away_corners","Corners",1],["home_fouls","away_fouls","Fouls",1],["home_offsides","away_offsides","Offsides",1],["home_saves","away_saves","Saves",1],["home_passes","away_passes","Passes",1],["home_pass_accuracy","away_pass_accuracy","Pass accuracy %",.1],["home_crosses","away_crosses","Crosses",1],["home_free_kicks","away_free_kicks","Free kicks",1],["home_goal_kicks","away_goal_kicks","Goal kicks",1],["home_throw_ins","away_throw_ins","Throw-ins",1],["home_xg","away_xg","Expected goals (xG)",.1]];
+const FORMATION_STARTER_SLOTS={
+ "4-4-2":["GK","RB","CB","CB","LB","RM","CM","CM","LM","ST","ST"],
+ "4-3-3":["GK","RB","CB","CB","LB","CM","CM","CM","LW","ST","RW"],
+ "4-2-3-1":["GK","RB","CB","CB","LB","DM","DM","LW","AM","RW","ST"],
+ "3-5-2":["GK","CB","CB","CB","RWB","CM","CM","CM","LWB","ST","ST"],
+ "3-4-3":["GK","CB","CB","CB","RM","CM","CM","LM","LW","ST","RW"],
+ "5-3-2":["GK","RWB","CB","CB","CB","LWB","CM","CM","CM","ST","ST"],
+ "5-4-1":["GK","RWB","CB","CB","CB","LWB","RM","CM","CM","LM","ST"],
+ "4-1-4-1":["GK","RB","CB","CB","LB","DM","RM","CM","CM","LM","ST"],
+ "4-3-2-1":["GK","RB","CB","CB","LB","CM","CM","CM","AM","AM","ST"],
+ "3-4-2-1":["GK","CB","CB","CB","RM","CM","CM","LM","AM","AM","ST"],
+ "4-3-1-2":["GK","RB","CB","CB","LB","CM","CM","CM","AM","ST","ST"],
+ "4-2-2-2":["GK","RB","CB","CB","LB","DM","DM","AM","AM","ST","ST"]
+};
+const POSITION_ALIASES={
+ GK:["GK","GOALKEEPER","KEEPER"],
+ RB:["RB","RIGHT BACK","RIGHT-BACK"],
+ LB:["LB","LEFT BACK","LEFT-BACK"],
+ CB:["CB","CENTRE BACK","CENTER BACK","CENTRE-BACK","CENTER-BACK","DEFENDER","DEF"],
+ RWB:["RWB","RIGHT WING-BACK","RIGHT WING BACK"],
+ LWB:["LWB","LEFT WING-BACK","LEFT WING BACK"],
+ DM:["DM","DEFENSIVE MIDFIELDER","DEFENSIVE MID"],
+ CM:["CM","CENTRAL MIDFIELDER","CENTRAL MID","MIDFIELDER","MID"],
+ AM:["AM","ATTACKING MIDFIELDER","ATTACKING MID"],
+ RM:["RM","RIGHT MIDFIELDER","RIGHT MID","RIGHT WINGER"],
+ LM:["LM","LEFT MIDFIELDER","LEFT MID","LEFT WINGER"],
+ RW:["RW","RIGHT WINGER","RIGHT WING"],
+ LW:["LW","LEFT WINGER","LEFT WING"],
+ ST:["ST","STRIKER","CENTRE FORWARD","CENTER FORWARD","CF","FW","FORWARD"]
+};
+function canonicalPosition(value){
+ const v=String(value||"").trim().toUpperCase().replace(/\s+/g," ");
+ if(!v)return "";
+ for(const [key,aliases] of Object.entries(POSITION_ALIASES))if(aliases.includes(v))return key;
+ return v;
+}
+function resolveFormationStarters(rows,formation){
+ const slots=FORMATION_STARTER_SLOTS[formation]||[];
+ const starters=(rows||[]).filter(x=>x.role==="starter");
+ const used=new Set(),resolved=[];
+ slots.forEach(position=>{
+  const exact=starters.find(x=>!used.has(x.player_id)&&canonicalPosition(x.position)===position);
+  const fallback=starters.find(x=>!used.has(x.player_id)&&!x.position);
+  const row=exact||fallback;
+  if(row){used.add(row.player_id);resolved.push(row);}
+ });
+ return resolved;
+}
 export default function ReporterPage(){
  const [loading,setLoading]=useState(true),[user,setUser]=useState(null),[profile,setProfile]=useState(null),[assignments,setAssignments]=useState([]),[matches,setMatches]=useState([]),[players,setPlayers]=useState([]),[coaches,setCoaches]=useState([]),[selectedId,setSelectedId]=useState(""),[events,setEvents]=useState([]),[lineupPlayers,setLineupPlayers]=useState([]),[lineups,setLineups]=useState([]),[stats,setStats]=useState(null),[report,setReport]=useState(null),[tick,setTick]=useState(0),[saving,setSaving]=useState(false),[error,setError]=useState(""),[notice,setNotice]=useState("");
  const selected=matches.find(x=>x.id===selectedId),assignment=assignments.find(x=>x.match_id===selectedId),[event,setEvent]=useState({type:"goal",team_id:"",player_id:"",secondary_player_id:"",coach_id:"",actor_type:"player",minute:"",extra_minute:"",rating:"7.0",details:""});
@@ -20,18 +68,18 @@ export default function ReporterPage(){
   [...events].sort((a,b)=>new Date(a.created_at)-new Date(b.created_at)).filter(x=>x.event_type==="substitution").forEach(x=>{
     const out=byId.get(x.player_id),inc=byId.get(x.secondary_player_id);
     if(out)out.onField=false;
-    if(inc)inc.onField=true;
+    if(inc&&inc.role==="substitute"&&!inc.usedAsSubstitute){inc.onField=true;inc.usedAsSubstitute=true;}
   });
   return byId;
  },[lineupPlayers,events]);
  const outgoingPlayers=useMemo(()=>eventPlayers.filter(p=>substitutionState.get(p.id)?.onField),[eventPlayers,substitutionState]);
  const redCardIds=useMemo(()=>new Set(events.filter(x=>x.event_type==="red_card"&&x.player_id).map(x=>x.player_id)),[events]);
  const activeEventPlayers=useMemo(()=>eventPlayers.filter(p=>substitutionState.get(p.id)?.onField&&!redCardIds.has(p.id)),[eventPlayers,substitutionState,redCardIds]);
- const incomingPlayers=useMemo(()=>eventPlayers.filter(p=>substitutionState.get(p.id)?.role==="substitute"&&!substitutionState.get(p.id)?.onField&&!redCardIds.has(p.id)),[eventPlayers,substitutionState,redCardIds]);
+ const incomingPlayers=useMemo(()=>eventPlayers.filter(p=>substitutionState.get(p.id)?.role==="substitute"&&!substitutionState.get(p.id)?.onField&&!substitutionState.get(p.id)?.usedAsSubstitute&&!redCardIds.has(p.id)),[eventPlayers,substitutionState,redCardIds]);
  const redCoachIds=useMemo(()=>new Set(events.filter(x=>x.event_type==="red_card"&&x.coach_id).map(x=>x.coach_id)),[events]);
  const eventCoaches=useMemo(()=>coaches.filter(c=>c.is_active&&!redCoachIds.has(c.id)&&Array.isArray(c.team_coaches)&&c.team_coaches.some(tc=>tc.team_id===event.team_id&&tc.is_current)),[coaches,redCoachIds,event.team_id]);
  async function refresh(){const s=sb();const me=await s.auth.getUser();if(me.error||!me.data.user){location.href="/login";return;}setUser(me.data.user);const p=await s.from("profiles").select("id,full_name,role,is_active").eq("id",me.data.user.id).maybeSingle();if(p.error){setError(p.error.message);return;}setProfile(p.data);if(p.data?.role!=="reporter"||!p.data.is_active)return;const a=await s.from("reporter_assignments").select("*").eq("reporter_id",me.data.user.id).order("created_at",{ascending:false});if(a.error){setError(a.error.message);return;}const ids=(a.data||[]).map(x=>x.match_id);const [m,pl,co]=await Promise.all([ids.length?s.from("matches").select("*,home:teams!matches_home_team_id_fkey(name),away:teams!matches_away_team_id_fkey(name),seasons(name),stages(name)").in("id",ids):{data:[],error:null},s.from("players").select("id,team_id,full_name,shirt_number,position,photo_url"),s.from("coaches").select("id,full_name,role,is_active,team_coaches(team_id,is_current)")]);const bad=[m,pl,co].find(x=>x.error);if(bad){setError(bad.error.message);return;}setAssignments(a.data||[]);setMatches(m.data||[]);setPlayers(pl.data||[]);setCoaches(co.data||[]);if(a.data?.length&&!selectedId)setSelectedId(a.data[0].match_id);}
- async function loadMatch(){if(!selectedId||!user)return;const s=sb();const [e,st,r,lu]=await Promise.all([s.from("match_events").select("*,teams(name),player:players!match_events_player_id_fkey(full_name,shirt_number,photo_url),secondary_player:players!match_events_secondary_player_id_fkey(full_name,shirt_number,photo_url),coach:coaches!match_events_coach_id_fkey(full_name,role)").eq("match_id",selectedId).order("created_at",{ascending:false}),s.from("match_statistics").select("*").eq("match_id",selectedId).maybeSingle(),s.from("match_reports").select("*").eq("match_id",selectedId).eq("reporter_id",user.id).maybeSingle(),s.from("match_lineups").select("id,team_id,formation,captain_player_id,submitted_at,team:teams(id,name,short_name,logo_url),lineup_players:match_lineup_players(id,player_id,role,shirt_number,position,rating,player:players(id,full_name,shirt_number,position,photo_url))").eq("match_id",selectedId)]);const bad=[e,st,r,lu].find(x=>x.error);if(bad){setError(bad.error.message);return;}setEvents(e.data||[]);setStats(st.data||null);setReport(r.data||null);setLineups(lu.data||[]);setLineupPlayers((lu.data||[]).flatMap(x=>(x.lineup_players||[]).map(p=>({player_id:p.player_id,role:p.role,team_id:x.team_id,position:p.position,photo_url:p.player?.photo_url||null}))));}
+ async function loadMatch(){if(!selectedId||!user)return;const s=sb();const [e,st,r,lu]=await Promise.all([s.from("match_events").select("*,teams(name),player:players!match_events_player_id_fkey(full_name,shirt_number,photo_url),secondary_player:players!match_events_secondary_player_id_fkey(full_name,shirt_number,photo_url),coach:coaches!match_events_coach_id_fkey(full_name,role)").eq("match_id",selectedId).order("created_at",{ascending:false}),s.from("match_statistics").select("*").eq("match_id",selectedId).maybeSingle(),s.from("match_reports").select("*").eq("match_id",selectedId).eq("reporter_id",user.id).maybeSingle(),s.from("match_lineups").select("id,team_id,formation,captain_player_id,submitted_at,team:teams(id,name,short_name,logo_url),lineup_players:match_lineup_players(id,player_id,role,shirt_number,position,rating,player:players(id,full_name,shirt_number,position,photo_url))").eq("match_id",selectedId)]);const bad=[e,st,r,lu].find(x=>x.error);if(bad){setError(bad.error.message);return;}setEvents(e.data||[]);setStats(st.data||null);setReport(r.data||null);const normalizedLineups=(lu.data||[]).map(x=>{const validStarterIds=new Set(resolveFormationStarters(x.lineup_players||[],x.formation).map(p=>p.player_id));return {...x,lineup_players:(x.lineup_players||[]).map(p=>({...p,role:p.role==="starter"&&!validStarterIds.has(p.player_id)?"substitute":p.role}))};});setLineups(normalizedLineups);setLineupPlayers(normalizedLineups.flatMap(x=>(x.lineup_players||[]).map(p=>({player_id:p.player_id,role:p.role,team_id:x.team_id,position:p.position,photo_url:p.player?.photo_url||null}))));}
  useEffect(()=>{refresh().finally(()=>setLoading(false));},[]);useEffect(()=>{loadMatch();},[selectedId,user]);useEffect(()=>{if(!selected)return;const f=()=>setTick(elapsed(selected));f();const id=setInterval(f,1000);return()=>clearInterval(id);},[selected]);
  async function assignmentStatus(status){if(!assignment)return;setSaving(true);const r=await sb().from("reporter_assignments").update({status,...(status==="accepted"?{accepted_at:new Date().toISOString()}:{}),...(status==="completed"?{completed_at:new Date().toISOString()}:{} )}).eq("id",assignment.id);setSaving(false);if(r.error)setError(r.error.message);else{setNotice("Assignment updated.");await refresh();}}
  async function matchAction(action){if(!selected)return;const now=new Date().toISOString(),v=action==="start"?{status:"live",kickoff_at:selected.kickoff_at||now}:action==="halftime"?{status:"halftime",halftime_at:now}:action==="resume"?{status:"live",second_half_at:now}:{status:"finished",finished_at:now};setSaving(true);const r=await sb().from("matches").update(v).eq("id",selected.id);setSaving(false);if(r.error)setError(r.error.message);else{setNotice("Match status updated.");await refresh();}}
